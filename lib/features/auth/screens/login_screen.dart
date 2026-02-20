@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/storage_service.dart';
@@ -13,6 +14,8 @@ import '../../../core/widgets/loading_button.dart';
 import '../../../core/widgets/error_screens.dart';
 import '../screens/signup_screen.dart';
 import '../../home/screens/home_screen.dart';
+import '../../subscription/screens/subscription_screen.dart';
+import '../../subscription/providers/subscription_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -83,7 +86,17 @@ class _LoginScreenState extends State<LoginScreen> {
         await StorageService.saveUser(response.user!);
 
         if (!mounted) return;
-        NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+        
+        final subscriptionProvider = context.read<SubscriptionProvider>();
+        await subscriptionProvider.checkSubscriptionStatus();
+        
+        if (!mounted) return;
+        
+        if (subscriptionProvider.hasValidAccess) {
+          NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+        } else {
+          NavigationUtils.pushAndRemoveUntil(const SubscriptionScreen());
+        }
         SnackbarUtils.showSuccess('Login successful');
       }
     } on ApiException catch (e) {

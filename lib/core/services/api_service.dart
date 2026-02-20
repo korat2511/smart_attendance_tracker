@@ -8,6 +8,7 @@ import '../models/staff_model.dart';
 import '../models/attendance_model.dart';
 import '../models/report_model.dart';
 import '../models/cashbook_model.dart';
+import '../models/subscription_model.dart';
 import '../services/storage_service.dart';
 
 class ApiService {
@@ -129,6 +130,26 @@ class ApiService {
       _handleResponse<Map<String, dynamic>>(
         response,
         (json) => json,
+      );
+    }
+  }
+
+  Future<void> deleteAccount() async {
+    final response = await _handleRequest(() async {
+      return await http.delete(
+        Uri.parse('${ApiConstants.basePath}/auth/delete-account'),
+        headers: await _getHeaders(includeAuth: true),
+      );
+    });
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      await StorageService.clearUser();
+    } else {
+      final body = jsonDecode(response.body);
+      throw ApiException(
+        message: body['message'] ?? 'Failed to delete account',
+        statusCode: response.statusCode,
+        type: ApiExceptionType.serverError,
       );
     }
   }
@@ -649,6 +670,40 @@ class ApiService {
         Uri.parse('${ApiConstants.basePath}/cashbook/expense'),
         headers: await _getHeaders(includeAuth: true),
         body: jsonEncode(body),
+      );
+    });
+  }
+
+  // Subscription APIs
+  Future<SubscriptionStatusModel> getSubscriptionStatus() async {
+    final response = await _handleRequest(() async {
+      return await http.get(
+        Uri.parse('${ApiConstants.basePath}/subscription/status'),
+        headers: await _getHeaders(includeAuth: true),
+      );
+    });
+
+    final json = _handleResponse<Map<String, dynamic>>(response, (json) => json);
+    return SubscriptionStatusModel.fromJson(json);
+  }
+
+  Future<SubscriptionCreateResponse> createSubscription() async {
+    final response = await _handleRequest(() async {
+      return await http.post(
+        Uri.parse('${ApiConstants.basePath}/subscription/create'),
+        headers: await _getHeaders(includeAuth: true),
+      );
+    });
+
+    final json = _handleResponse<Map<String, dynamic>>(response, (json) => json);
+    return SubscriptionCreateResponse.fromJson(json);
+  }
+
+  Future<void> cancelSubscription() async {
+    await _handleRequest(() async {
+      return await http.post(
+        Uri.parse('${ApiConstants.basePath}/subscription/cancel'),
+        headers: await _getHeaders(includeAuth: true),
       );
     });
   }

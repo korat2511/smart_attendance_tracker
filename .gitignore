@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Android signing keys (keep secure, do not commit)
+/android/key.properties
+/android/app/keystore/
+
 # Backend (Laravel)
 /backend/vendor/
 /backend/node_modules/

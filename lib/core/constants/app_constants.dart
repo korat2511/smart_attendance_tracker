@@ -2,7 +2,7 @@
 abstract class AppConstants {
   AppConstants._();
 
-  static const String appName = 'Smart Attendance Tracker';
+  static const String appName = 'AttendEx';
   static const String appVersion = '1.0.0';
 
   /// Minimum supported Android SDK (if needed for checks)

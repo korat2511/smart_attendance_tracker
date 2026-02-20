@@ -11,7 +11,7 @@ import '../../../core/utils/focus_utils.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/widgets/loading_button.dart';
 import '../../../core/widgets/error_screens.dart';
-import '../../home/screens/home_screen.dart';
+import '../../subscription/screens/subscription_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -123,7 +123,7 @@ class _SignupScreenState extends State<SignupScreen> {
         await StorageService.saveUser(response.user!);
 
         if (!mounted) return;
-        NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+        NavigationUtils.pushAndRemoveUntil(const SubscriptionScreen());
         SnackbarUtils.showSuccess('Account created successfully');
       }
     } on ApiException catch (e) {

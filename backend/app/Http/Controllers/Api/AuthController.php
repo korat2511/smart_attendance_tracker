@@ -4,8 +4,16 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Staff;
+use App\Models\Attendance;
+use App\Models\CashbookIncome;
+use App\Models\CashbookExpense;
+use App\Models\Subscription;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -147,5 +155,85 @@ class AuthController extends Controller
                 ],
             ],
         ], 200);
+    }
+
+    /**
+     * Delete user account and all associated data
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function deleteAccount(Request $request)
+    {
+        $user = $request->user();
+
+        try {
+            DB::beginTransaction();
+
+            // Cancel any active Razorpay subscription
+            $activeSubscription = Subscription::where('user_id', $user->id)
+                ->whereIn('status', ['active', 'authenticated', 'pending'])
+                ->first();
+
+            if ($activeSubscription && $activeSubscription->razorpay_subscription_id) {
+                try {
+                    $keyId = config('services.razorpay.key_id');
+                    $keySecret = config('services.razorpay.key_secret');
+
+                    Http::withBasicAuth($keyId, $keySecret)
+                        ->post("https://api.razorpay.com/v1/subscriptions/{$activeSubscription->razorpay_subscription_id}/cancel", [
+                            'cancel_at_cycle_end' => 0,
+                        ]);
+                } catch (\Exception $e) {
+                    Log::warning('Failed to cancel Razorpay subscription during account deletion', [
+                        'user_id' => $user->id,
+                        'subscription_id' => $activeSubscription->razorpay_subscription_id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            // Get all staff IDs for this user
+            $staffIds = Staff::withoutGlobalScopes()->where('user_id', $user->id)->pluck('id');
+
+            // Delete attendance records for all staff
+            Attendance::withoutGlobalScopes()->whereIn('staff_id', $staffIds)->delete();
+
+            // Delete all staff
+            Staff::withoutGlobalScopes()->where('user_id', $user->id)->delete();
+
+            // Delete cashbook entries
+            CashbookIncome::withoutGlobalScopes()->where('user_id', $user->id)->delete();
+            CashbookExpense::withoutGlobalScopes()->where('user_id', $user->id)->delete();
+
+            // Delete subscriptions
+            Subscription::where('user_id', $user->id)->delete();
+
+            // Revoke all tokens
+            $user->tokens()->delete();
+
+            // Delete the user
+            $user->delete();
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Account deleted successfully.',
+            ], 200);
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+
+            Log::error('Account deletion failed', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to delete account. Please try again.',
+            ], 500);
+        }
     }
 }

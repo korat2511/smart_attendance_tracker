@@ -1,4 +1,4 @@
-package com.example.smart_attendance_tracker;
+package com.originlab.attendex;
 
 import io.flutter.embedding.android.FlutterActivity;
 

@@ -5,6 +5,8 @@ use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\CashbookController;
+use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\Api\RazorpayWebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -35,10 +37,14 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/register', [AuthController::class, 'signup']);
     
+    // Razorpay webhook (public, no auth - verified via signature)
+    Route::post('/webhooks/razorpay', [RazorpayWebhookController::class, 'handle']);
+    
     // Protected routes (authentication required)
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
+        Route::delete('/auth/delete-account', [AuthController::class, 'deleteAccount']);
         
         // Staff routes
         Route::prefix('staff')->group(function () {
@@ -68,6 +74,13 @@ Route::prefix('v1')->group(function () {
             Route::get('/transactions', [CashbookController::class, 'getTransactions']);
             Route::post('/income', [CashbookController::class, 'addIncome']);
             Route::post('/expense', [CashbookController::class, 'addExpense']);
+        });
+
+        // Subscription routes
+        Route::prefix('subscription')->group(function () {
+            Route::get('/status', [SubscriptionController::class, 'getStatus']);
+            Route::post('/create', [SubscriptionController::class, 'create']);
+            Route::post('/cancel', [SubscriptionController::class, 'cancel']);
         });
         
         // Profile routes

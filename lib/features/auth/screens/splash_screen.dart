@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../core/utils/navigation_utils.dart';
@@ -6,6 +7,8 @@ import '../../../core/utils/responsive_utils.dart';
 import '../../../core/typography/app_typography.dart';
 import '../screens/login_screen.dart';
 import '../../home/screens/home_screen.dart';
+import '../../subscription/screens/subscription_screen.dart';
+import '../../subscription/providers/subscription_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -30,7 +33,20 @@ class _SplashScreenState extends State<SplashScreen> {
     final isLoggedIn = StorageService.isLoggedIn();
 
     if (isLoggedIn) {
-      NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+      try {
+        final subscriptionProvider = context.read<SubscriptionProvider>();
+        await subscriptionProvider.checkSubscriptionStatus();
+        
+        if (!mounted) return;
+        
+        if (subscriptionProvider.hasValidAccess) {
+          NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+        } else {
+          NavigationUtils.pushAndRemoveUntil(const SubscriptionScreen());
+        }
+      } catch (e) {
+        NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+      }
     } else {
       NavigationUtils.pushAndRemoveUntil(const LoginScreen());
     }

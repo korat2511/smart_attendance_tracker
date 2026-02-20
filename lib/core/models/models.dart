@@ -7,3 +7,4 @@ export 'staff_model.dart';
 export 'attendance_model.dart';
 export 'report_model.dart';
 export 'cashbook_model.dart';
+export 'subscription_model.dart';
