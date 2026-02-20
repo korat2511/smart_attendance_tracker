@@ -23,8 +23,10 @@ class AttendanceController extends Controller
             'staff_id' => 'required|integer|exists:staff,id',
             'date' => 'required|date',
             'status' => ['required', 'string', Rule::in(['present', 'absent', 'off', 'half_day'])],
-            'in_time' => 'required_if:status,present|required_if:status,half_day|nullable|date_format:H:i',
+            'in_time' => 'nullable|date_format:H:i',
             'out_time' => 'nullable|date_format:H:i',
+            'worked_hours' => 'nullable|numeric|min:0|max:24',
+            'pay_multiplier' => 'nullable|numeric|min:0|max:10',
         ]);
 
         // Verify staff belongs to authenticated user
@@ -37,22 +39,22 @@ class AttendanceController extends Controller
             ->where('date', $validated['date'])
             ->first();
 
+        $attendanceData = [
+            'status' => $validated['status'],
+            'in_time' => ($validated['status'] === 'present' || $validated['status'] === 'half_day') 
+                ? ($validated['in_time'] ?? null) : null,
+            'out_time' => $validated['out_time'] ?? null,
+            'worked_hours' => $validated['worked_hours'] ?? 0,
+            'pay_multiplier' => $validated['pay_multiplier'] ?? 1.0,
+        ];
+
         if ($attendance) {
-            // Update existing attendance
-            $attendance->update([
-                'status' => $validated['status'],
-                'in_time' => ($validated['status'] === 'present' || $validated['status'] === 'half_day') ? $validated['in_time'] : null,
-                'out_time' => $validated['out_time'] ?? null,
-            ]);
+            $attendance->update($attendanceData);
         } else {
-            // Create new attendance
-            $attendance = Attendance::create([
+            $attendance = Attendance::create(array_merge([
                 'staff_id' => $validated['staff_id'],
                 'date' => $validated['date'],
-                'status' => $validated['status'],
-                'in_time' => ($validated['status'] === 'present' || $validated['status'] === 'half_day') ? $validated['in_time'] : null,
-                'out_time' => $validated['out_time'] ?? null,
-            ]);
+            ], $attendanceData));
         }
 
         return response()->json([
@@ -67,6 +69,8 @@ class AttendanceController extends Controller
                     'in_time' => $attendance->in_time ? date('H:i', strtotime($attendance->in_time)) : null,
                     'out_time' => $attendance->out_time ? date('H:i', strtotime($attendance->out_time)) : null,
                     'overtime_hours' => (float) $attendance->overtime_hours,
+                    'worked_hours' => (float) $attendance->worked_hours,
+                    'pay_multiplier' => (float) $attendance->pay_multiplier,
                     'advance_amount' => (float) $attendance->advance_amount,
                 ],
             ],
@@ -127,6 +131,8 @@ class AttendanceController extends Controller
                     'in_time' => $attendance->in_time ? date('H:i', strtotime($attendance->in_time)) : null,
                     'out_time' => $attendance->out_time ? date('H:i', strtotime($attendance->out_time)) : null,
                     'overtime_hours' => (float) $attendance->overtime_hours,
+                    'worked_hours' => (float) $attendance->worked_hours,
+                    'pay_multiplier' => (float) $attendance->pay_multiplier,
                     'advance_amount' => (float) $attendance->advance_amount,
                 ],
             ],
@@ -185,6 +191,8 @@ class AttendanceController extends Controller
                 'in_time' => $attendance->in_time ? date('H:i', strtotime($attendance->in_time)) : null,
                 'out_time' => $attendance->out_time ? date('H:i', strtotime($attendance->out_time)) : null,
                 'overtime_hours' => (float) $attendance->overtime_hours,
+                'worked_hours' => (float) $attendance->worked_hours,
+                'pay_multiplier' => (float) $attendance->pay_multiplier,
                 'advance_amount' => (float) $attendance->advance_amount,
             ];
         });
@@ -263,6 +271,8 @@ class AttendanceController extends Controller
                     'in_time' => $attendance->in_time ? date('H:i', strtotime($attendance->in_time)) : null,
                     'out_time' => $attendance->out_time ? date('H:i', strtotime($attendance->out_time)) : null,
                     'overtime_hours' => (float) $attendance->overtime_hours,
+                    'worked_hours' => (float) $attendance->worked_hours,
+                    'pay_multiplier' => (float) $attendance->pay_multiplier,
                     'advance_amount' => (float) $attendance->advance_amount,
                 ],
             ],

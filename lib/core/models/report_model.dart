@@ -91,6 +91,8 @@ class PaymentSummaryModel {
   final double totalEarnings;
   final double advancePayments;
   final double netPayment;
+  final double totalWorkedHours;
+  final double totalOvertimeHours;
 
   PaymentSummaryModel({
     required this.basicEarnings,
@@ -98,6 +100,8 @@ class PaymentSummaryModel {
     required this.totalEarnings,
     required this.advancePayments,
     required this.netPayment,
+    this.totalWorkedHours = 0.0,
+    this.totalOvertimeHours = 0.0,
   });
 
   factory PaymentSummaryModel.fromJson(Map<String, dynamic> json) {
@@ -107,6 +111,8 @@ class PaymentSummaryModel {
       totalEarnings: _toDouble(json['total_earnings']),
       advancePayments: _toDouble(json['advance_payments']),
       netPayment: _toDouble(json['net_payment']),
+      totalWorkedHours: _toDouble(json['total_worked_hours']),
+      totalOvertimeHours: _toDouble(json['total_overtime_hours']),
     );
   }
 }
@@ -120,6 +126,8 @@ class AttendanceReportDetail {
   final double overtimeHours;
   final double advanceAmount;
   final double dailyEarnings;
+  final double workedHours;
+  final double payMultiplier;
 
   AttendanceReportDetail({
     required this.id,
@@ -130,7 +138,19 @@ class AttendanceReportDetail {
     this.overtimeHours = 0.0,
     this.advanceAmount = 0.0,
     this.dailyEarnings = 0.0,
+    this.workedHours = 0.0,
+    this.payMultiplier = 1.0,
   });
+
+  bool get hasOvertime => overtimeHours > 0;
+  
+  String get displayStatus {
+    if (status == 'P' && hasOvertime) return 'P+OT';
+    if (status == 'OT') return 'P+OT';
+    return status;
+  }
+
+  double get totalWorkedHours => workedHours + overtimeHours;
 
   factory AttendanceReportDetail.fromJson(Map<String, dynamic> json) {
     return AttendanceReportDetail(
@@ -142,6 +162,8 @@ class AttendanceReportDetail {
       overtimeHours: _toDouble(json['overtime_hours']),
       advanceAmount: _toDouble(json['advance_amount']),
       dailyEarnings: _toDouble(json['daily_earnings']),
+      workedHours: _toDouble(json['worked_hours']),
+      payMultiplier: _toDouble(json['pay_multiplier'], fallback: 1.0),
     );
   }
 }

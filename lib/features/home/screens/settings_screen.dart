@@ -12,6 +12,7 @@ import '../../../core/typography/app_typography.dart';
 import '../../../core/utils/responsive_utils.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../auth/screens/login_screen.dart';
+import 'pay_calculation_info_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -156,7 +157,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'Version ${AppConstants.appVersion}',
+                  'Version ${AppConstants.fullVersion}',
                   style: AppTypography.bodySmall(
                     color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   ),
@@ -250,6 +251,19 @@ class SettingsScreen extends StatelessWidget {
                 _buildSectionTitle(context, 'App Info'),
                 _buildSettingTile(
                   context,
+                  icon: Icons.calculate_outlined,
+                  title: 'Pay Calculation Guide',
+                  subtitle: 'How salary is calculated for staff',
+                  trailing: Icon(
+                    Icons.chevron_right,
+                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  ),
+                  onTap: () => NavigationUtils.push(const PayCalculationInfoScreen()),
+                  iconColor: Colors.orange,
+                  iconBgColor: Colors.orange.withOpacity(0.1),
+                ),
+                _buildSettingTile(
+                  context,
                   icon: Icons.privacy_tip_outlined,
                   title: 'Privacy Policy',
                   subtitle: 'Read our privacy policy',
@@ -278,7 +292,7 @@ class SettingsScreen extends StatelessWidget {
                   context,
                   icon: Icons.info_outline,
                   title: 'About',
-                  subtitle: 'Version ${AppConstants.appVersion}',
+                  subtitle: 'Version ${AppConstants.fullVersion}',
                   trailing: Icon(
                     Icons.chevron_right,
                     color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,

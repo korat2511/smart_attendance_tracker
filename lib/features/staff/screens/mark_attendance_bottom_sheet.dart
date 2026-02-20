@@ -11,7 +11,11 @@ class MarkAttendanceBottomSheet extends StatefulWidget {
   final String? currentStatus; // 'P', 'A', 'OT', 'Off', or null
   final String? currentInTime;
   final String? currentOutTime;
-  final Function(String status, String? inTime, String? outTime, double? overtimeHours) onMark;
+  final double? currentOvertimeHours;
+  final double? currentWorkedHours;
+  final double? currentPayMultiplier;
+  final String salaryType; // 'hourly', 'daily', 'weekly', 'monthly'
+  final Function(String status, String? inTime, String? outTime, double? overtimeHours, double? workedHours, double? payMultiplier) onMark;
 
   const MarkAttendanceBottomSheet({
     super.key,
@@ -19,8 +23,14 @@ class MarkAttendanceBottomSheet extends StatefulWidget {
     this.currentStatus,
     this.currentInTime,
     this.currentOutTime,
+    this.currentOvertimeHours,
+    this.currentWorkedHours,
+    this.currentPayMultiplier,
+    required this.salaryType,
     required this.onMark,
   });
+  
+  bool get isHourly => salaryType.toLowerCase() == 'hourly';
 
   @override
   State<MarkAttendanceBottomSheet> createState() => _MarkAttendanceBottomSheetState();
@@ -30,8 +40,12 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
   String? _selectedStatus;
   String? _inTime;
   String? _outTime;
-  double? _overtimeHours;
   bool _isLoading = false;
+  bool _useManualHours = false;
+  
+  late TextEditingController _workedHoursController;
+  late TextEditingController _overtimeHoursController;
+  late TextEditingController _payMultiplierController;
 
   @override
   void initState() {
@@ -39,8 +53,46 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
     _selectedStatus = widget.currentStatus;
     _inTime = widget.currentInTime;
     _outTime = widget.currentOutTime;
-    // If already marked as OT, we might want to show existing overtime hours
-    // But we don't store that in the bottom sheet, so we'll leave it null
+    
+    // Initialize controllers with existing values
+    _workedHoursController = TextEditingController(
+      text: widget.currentWorkedHours != null && widget.currentWorkedHours! > 0 
+          ? widget.currentWorkedHours.toString() 
+          : '',
+    );
+    _overtimeHoursController = TextEditingController(
+      text: widget.currentOvertimeHours != null && widget.currentOvertimeHours! > 0 
+          ? widget.currentOvertimeHours.toString() 
+          : '',
+    );
+    _payMultiplierController = TextEditingController(
+      text: widget.currentPayMultiplier != null && widget.currentPayMultiplier != 1.0 
+          ? widget.currentPayMultiplier.toString() 
+          : '',
+    );
+    
+    // If worked hours is set, default to manual hours mode
+    if (widget.currentWorkedHours != null && widget.currentWorkedHours! > 0) {
+      _useManualHours = true;
+    }
+  }
+  
+  @override
+  void dispose() {
+    _workedHoursController.dispose();
+    _overtimeHoursController.dispose();
+    _payMultiplierController.dispose();
+    super.dispose();
+  }
+
+  bool _isPresentSelected() {
+    final status = _selectedStatus ?? widget.currentStatus;
+    return status == 'P' || status == 'OT';
+  }
+
+  bool _isOvertimeSelected() {
+    final status = _selectedStatus ?? widget.currentStatus;
+    return status == 'OT';
   }
 
   String _getDateString() {
@@ -58,7 +110,7 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
     } else if (status == 'HD') {
       return 'Mark Half Day';
     } else if (status == 'OT') {
-      return 'Mark Overtime';
+      return 'Mark Present + Overtime';
     } else if (status == 'A') {
       return 'Mark Absent';
     } else if (status == 'Off') {
@@ -74,7 +126,7 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
     } else if (status == 'HD') {
       return 'Mark Half Day';
     } else if (status == 'OT') {
-      return 'Mark Overtime';
+      return 'Mark P + OT';
     } else if (status == 'A') {
       return 'Mark Absent';
     } else if (status == 'Off') {
@@ -131,17 +183,32 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
   }
 
   void _handleMark() {
-    // If no status selected, use current status or default to Present
     final statusToMark = _selectedStatus ?? widget.currentStatus ?? 'P';
+    
+    // Read values from controllers
+    final workedHours = double.tryParse(_workedHoursController.text);
+    final overtimeHours = double.tryParse(_overtimeHoursController.text);
+    final payMultiplier = double.tryParse(_payMultiplierController.text);
 
-    // Validation for Present/Half Day/OT status
-    if ((statusToMark == 'P' || statusToMark == 'HD' || statusToMark == 'OT') && _inTime == null) {
-      SnackbarUtils.showError('Please select check-in time');
-      return;
+    // Validation for Present/Half Day/OT status - only required for hourly staff
+    if (widget.isHourly && (statusToMark == 'P' || statusToMark == 'HD' || statusToMark == 'OT')) {
+      if (_useManualHours) {
+        // Manual hours mode - require worked hours for hourly staff
+        if (workedHours == null || workedHours <= 0) {
+          SnackbarUtils.showError('Please enter worked hours');
+          return;
+        }
+      } else {
+        // Time-based mode - require check-in time for hourly staff
+        if (_inTime == null) {
+          SnackbarUtils.showError('Please select check-in time');
+          return;
+        }
+      }
     }
 
-    // Validation for OT status
-    if (statusToMark == 'OT' && (_overtimeHours == null || _overtimeHours! <= 0)) {
+    // Validation for OT status - always required
+    if (statusToMark == 'OT' && (overtimeHours == null || overtimeHours <= 0)) {
       SnackbarUtils.showError('Please enter overtime hours');
       return;
     }
@@ -150,13 +217,29 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
       _isLoading = true;
     });
 
-    // For Absent or Off, clear times and overtime
-    final finalInTime = (statusToMark == 'P' || statusToMark == 'HD' || statusToMark == 'OT') ? _inTime : null;
-    final finalOutTime = (statusToMark == 'P' || statusToMark == 'HD' || statusToMark == 'OT') ? _outTime : null;
-    final finalOvertimeHours = statusToMark == 'OT' ? _overtimeHours : null;
+    // For Absent or Off, clear times, overtime, and worked hours
+    String? finalInTime;
+    String? finalOutTime;
+    double? finalOvertimeHours;
+    double? finalWorkedHours;
+    double? finalPayMultiplier;
 
-    // Call the callback - parent will handle the API call and close the sheet
-    widget.onMark(statusToMark, finalInTime, finalOutTime, finalOvertimeHours);
+    if (statusToMark == 'P' || statusToMark == 'HD' || statusToMark == 'OT') {
+      if (_useManualHours && (workedHours != null && workedHours > 0)) {
+        finalWorkedHours = workedHours;
+        finalInTime = null;
+        finalOutTime = null;
+      } else if (_inTime != null) {
+        finalInTime = _inTime;
+        finalOutTime = _outTime;
+        finalWorkedHours = null;
+      }
+      finalOvertimeHours = statusToMark == 'OT' ? overtimeHours : null;
+      // Pay multiplier applies to present/half day/OT
+      finalPayMultiplier = payMultiplier != null && payMultiplier > 0 ? payMultiplier : null;
+    }
+
+    widget.onMark(statusToMark, finalInTime, finalOutTime, finalOvertimeHours, finalWorkedHours, finalPayMultiplier);
   }
 
   @override
@@ -217,7 +300,7 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
             ),
           ),
 
-          // Status Selection - Always show all 5 buttons in one row
+          // Status Selection - Show P/HD/A/Off in first row
           Padding(
             padding: EdgeInsets.symmetric(
               horizontal: ResponsiveUtils.horizontalPadding(context),
@@ -229,12 +312,10 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'P',
                     'Present',
                     AppColors.successGreen,
-                    _selectedStatus == 'P' || widget.currentStatus == 'P',
+                    _isPresentSelected(),
                     () => setState(() {
                       _selectedStatus = 'P';
-                      // Clear overtime when switching to Present (user can add it separately)
-                      _overtimeHours = null;
-                      // Keep existing times if available
+                      _overtimeHoursController.clear();
                       if (_inTime == null && widget.currentInTime != null) {
                         _inTime = widget.currentInTime;
                       }
@@ -251,12 +332,10 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'HD',
                     'Half Day',
                     Colors.blue,
-                    _selectedStatus == 'HD' || widget.currentStatus == 'HD',
+                    _selectedStatus == 'HD' || (widget.currentStatus == 'HD' && _selectedStatus == null),
                     () => setState(() {
                       _selectedStatus = 'HD';
-                      // Clear overtime when switching to Half Day
-                      _overtimeHours = null;
-                      // Keep existing times if available
+                      _overtimeHoursController.clear();
                       if (_inTime == null && widget.currentInTime != null) {
                         _inTime = widget.currentInTime;
                       }
@@ -273,13 +352,13 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'A',
                     'Absent',
                     AppColors.warningRed,
-                    _selectedStatus == 'A' || widget.currentStatus == 'A',
+                    _selectedStatus == 'A' || (widget.currentStatus == 'A' && _selectedStatus == null),
                     () => setState(() {
                       _selectedStatus = 'A';
-                      // Clear times and overtime when marking as Absent
                       _inTime = null;
                       _outTime = null;
-                      _overtimeHours = null;
+                      _overtimeHoursController.clear();
+                      _workedHoursController.clear();
                     }),
                     isDark,
                   ),
@@ -290,13 +369,13 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'Off',
                     'Off',
                     Colors.purple,
-                    _selectedStatus == 'Off' || widget.currentStatus == 'Off',
+                    _selectedStatus == 'Off' || (widget.currentStatus == 'Off' && _selectedStatus == null),
                     () => setState(() {
                       _selectedStatus = 'Off';
-                      // Clear times and overtime when marking as Off
                       _inTime = null;
                       _outTime = null;
-                      _overtimeHours = null;
+                      _overtimeHoursController.clear();
+                      _workedHoursController.clear();
                     }),
                     isDark,
                   ),
@@ -307,15 +386,13 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'OT',
                     'Overtime',
                     Colors.orange,
-                    _selectedStatus == 'OT' || widget.currentStatus == 'OT',
+                    _isOvertimeSelected(),
                     () {
                       setState(() {
                         _selectedStatus = 'OT';
-                        // Pre-fill in-time if available
                         if (_inTime == null && widget.currentInTime != null) {
                           _inTime = widget.currentInTime;
                         }
-                        // Pre-fill out-time if available
                         if (_outTime == null && widget.currentOutTime != null) {
                           _outTime = widget.currentOutTime;
                         }
@@ -328,54 +405,164 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
             ),
           ),
 
-          // Check In / Check Out (only for Present, Half Day, or OT)
+          // Check In / Check Out OR Manual Hours (only for Present, Half Day, or OT)
           if ((_selectedStatus == 'P' || _selectedStatus == 'HD' || _selectedStatus == 'OT') ||
               (_selectedStatus == null && (widget.currentStatus == 'P' || widget.currentStatus == 'HD' || widget.currentStatus == 'OT')))
             Padding(
               padding: EdgeInsets.all(ResponsiveUtils.horizontalPadding(context)),
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      // Check In
-                      Expanded(
-                        child: _buildTimeField(
-                          label: 'Check In',
-                          icon: Icons.login,
-                          iconColor: AppColors.successGreen,
-                          time: _inTime,
-                          onTap: () {
-                            // If status not selected yet, set it to Present
-                            if (_selectedStatus == null) {
-                              setState(() {
-                                _selectedStatus = 'P';
-                              });
-                            }
-                            _selectTime('in');
-                          },
-                          isDark: isDark,
+                  // Toggle between Time-based and Manual Hours
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.surfaceDark : Colors.grey[200],
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _useManualHours = false),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: !_useManualHours 
+                                    ? (isDark ? AppColors.primaryBlue : Colors.white)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: !_useManualHours ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 4,
+                                  ),
+                                ] : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.access_time,
+                                    size: 18,
+                                    color: !_useManualHours
+                                        ? (isDark ? Colors.white : AppColors.primaryBlue)
+                                        : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Time',
+                                    style: AppTypography.bodyMedium(
+                                      color: !_useManualHours
+                                          ? (isDark ? Colors.white : AppColors.primaryBlue)
+                                          : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                                      fontWeight: !_useManualHours ? FontWeight.w600 : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 16),
-                      // Check Out - can be added later by clicking
-                      Expanded(
-                        child: _buildTimeField(
-                          label: 'Check Out',
-                          icon: Icons.logout,
-                          iconColor: AppColors.warningRed,
-                          time: _outTime,
-                          onTap: () => _selectTime('out'),
-                          isDark: isDark,
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => setState(() => _useManualHours = true),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _useManualHours 
+                                    ? (isDark ? AppColors.primaryBlue : Colors.white)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: _useManualHours ? [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 4,
+                                  ),
+                                ] : null,
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.edit_note,
+                                    size: 18,
+                                    color: _useManualHours
+                                        ? (isDark ? Colors.white : AppColors.primaryBlue)
+                                        : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Manual Hours',
+                                    style: AppTypography.bodyMedium(
+                                      color: _useManualHours
+                                          ? (isDark ? Colors.white : AppColors.primaryBlue)
+                                          : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                                      fontWeight: _useManualHours ? FontWeight.w600 : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  const SizedBox(height: 16),
+                  
+                  // Show either Time fields or Manual Hours input
+                  if (!_useManualHours) ...[
+                    Row(
+                      children: [
+                        // Check In
+                        Expanded(
+                          child: _buildTimeField(
+                            label: widget.isHourly ? 'Check In *' : 'Check In (Optional)',
+                            icon: Icons.login,
+                            iconColor: AppColors.successGreen,
+                            time: _inTime,
+                            onTap: () {
+                              if (_selectedStatus == null) {
+                                setState(() {
+                                  _selectedStatus = 'P';
+                                });
+                              }
+                              _selectTime('in');
+                            },
+                            isDark: isDark,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        // Check Out
+                        Expanded(
+                          child: _buildTimeField(
+                            label: 'Check Out (Optional)',
+                            icon: Icons.logout,
+                            iconColor: AppColors.warningRed,
+                            time: _outTime,
+                            onTap: () => _selectTime('out'),
+                            isDark: isDark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    // Manual Hours Input
+                    _buildManualHoursInput(isDark),
+                  ],
+                  
                   // Overtime Hours Input (only for OT status)
                   if (_selectedStatus == 'OT')
                     Padding(
                       padding: const EdgeInsets.only(top: 16),
                       child: _buildOvertimeInput(isDark),
                     ),
+                  
+                  // Pay Multiplier Input
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: _buildPayMultiplierInput(isDark),
+                  ),
                 ],
               ),
             ),
@@ -540,13 +727,31 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
     );
   }
 
-  Widget _buildOvertimeInput(bool isDark) {
-    final controller = TextEditingController(
-      text: _overtimeHours?.toString() ?? '',
-    );
-
+  Widget _buildManualHoursInput(bool isDark) {
     return TextField(
-      controller: controller,
+      controller: _workedHoursController,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+      ],
+      decoration: InputDecoration(
+        labelText: widget.isHourly ? 'Worked Hours *' : 'Worked Hours (Optional)',
+        hintText: 'Enter hours worked (e.g. 8)',
+        prefixIcon: const Icon(Icons.schedule, color: AppColors.primaryBlue),
+        suffixText: 'hrs',
+        filled: true,
+        fillColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOvertimeInput(bool isDark) {
+    return TextField(
+      controller: _overtimeHoursController,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
@@ -562,12 +767,102 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
           borderSide: BorderSide.none,
         ),
       ),
-      onChanged: (value) {
-        final hours = double.tryParse(value);
+    );
+  }
+
+  Widget _buildPayMultiplierInput(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.trending_up, size: 16, color: Colors.purple),
+            const SizedBox(width: 6),
+            Text(
+              'Pay Multiplier (Optional)',
+              style: AppTypography.bodySmall(
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            // Quick select buttons
+            _buildMultiplierChip('1x', 1.0, isDark),
+            const SizedBox(width: 8),
+            _buildMultiplierChip('1.5x', 1.5, isDark),
+            const SizedBox(width: 8),
+            _buildMultiplierChip('2x', 2.0, isDark),
+            const SizedBox(width: 12),
+            // Custom input
+            Expanded(
+              child: TextField(
+                controller: _payMultiplierController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d{0,2}')),
+                ],
+                decoration: InputDecoration(
+                  hintText: 'Custom',
+                  suffixText: 'x',
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  filled: true,
+                  fillColor: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Use for special pay (e.g., 2x for Sunday work)',
+          style: AppTypography.bodySmall(
+            color: isDark ? AppColors.textSecondaryDark.withValues(alpha: 0.7) : AppColors.textSecondaryLight.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMultiplierChip(String label, double value, bool isDark) {
+    final currentValue = double.tryParse(_payMultiplierController.text) ?? 1.0;
+    final isSelected = currentValue == value;
+    
+    return GestureDetector(
+      onTap: () {
         setState(() {
-          _overtimeHours = hours;
+          if (value == 1.0) {
+            _payMultiplierController.clear();
+          } else {
+            _payMultiplierController.text = value.toString();
+          }
         });
       },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.purple : (isDark ? AppColors.surfaceDark : Colors.grey[200]),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? Colors.purple : Colors.transparent,
+            width: 1.5,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTypography.bodySmall(
+            color: isSelected ? Colors.white : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
     );
   }
 }

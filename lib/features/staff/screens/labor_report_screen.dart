@@ -403,6 +403,23 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
 
   Widget _buildPaymentSummary(BuildContext context, ThemeData theme, bool isDark, ReportProvider reportProvider) {
     final payment = reportProvider.report!.paymentSummary;
+    final report = reportProvider.report!;
+    final isHourly = report.salaryType.toLowerCase() == 'hourly';
+    
+    // Calculate total worked hours from attendance details if not provided by backend
+    double totalWorkedHours = payment.totalWorkedHours;
+    double totalOvertimeHours = payment.totalOvertimeHours;
+    
+    if (totalWorkedHours == 0 && totalOvertimeHours == 0) {
+      for (var detail in report.attendanceDetails) {
+        if (detail.status == 'P' || detail.status == 'OT') {
+          totalWorkedHours += detail.workedHours > 0 ? detail.workedHours : 8.0; // Default 8 hrs if not set
+        } else if (detail.status == 'HD') {
+          totalWorkedHours += detail.workedHours > 0 ? detail.workedHours : 4.0; // Default 4 hrs for half day
+        }
+        totalOvertimeHours += detail.overtimeHours;
+      }
+    }
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -427,6 +444,31 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
           ),
           child: Column(
             children: [
+              if (isHourly) ...[
+                _buildPaymentRow(
+                  'Total Worked Hours',
+                  '${(totalWorkedHours + totalOvertimeHours).toStringAsFixed(1)} hrs',
+                  isDark,
+                  false,
+                  valueColor: AppColors.primaryBlue,
+                ),
+                if (totalOvertimeHours > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Text(
+                          '(Regular: ${totalWorkedHours.toStringAsFixed(1)}h + OT: ${totalOvertimeHours.toStringAsFixed(1)}h)',
+                          style: AppTypography.bodySmall(
+                            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                const Divider(height: 24),
+              ],
               _buildPaymentRow('Basic Earnings', '₹${payment.basicEarnings.toStringAsFixed(2)}', isDark, false),
               const Divider(height: 24),
               _buildPaymentRow('Overtime Earnings', '₹${payment.overtimeEarnings.toStringAsFixed(2)}', isDark, false),
@@ -443,7 +485,7 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
     );
   }
 
-  Widget _buildPaymentRow(String label, String value, bool isDark, bool isBold, {bool isNet = false}) {
+  Widget _buildPaymentRow(String label, String value, bool isDark, bool isBold, {bool isNet = false, Color? valueColor}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -457,9 +499,9 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
         Text(
           value,
           style: AppTypography.bodyMedium(
-            color: isNet
+            color: valueColor ?? (isNet
                 ? AppColors.primaryBlue
-                : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
+                : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)),
             fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
           ),
         ),
@@ -554,13 +596,47 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
                                             ),
                                           ),
                                           child: Text(
-                                            detail.status,
+                                            detail.displayStatus,
                                             style: AppTypography.bodySmall(
                                               color: _getStatusColor(detail.status),
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ),
+                                        if (detail.hasOvertime) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.orange,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '${detail.overtimeHours.toStringAsFixed(1)}h OT',
+                                              style: AppTypography.bodySmall(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                        if (detail.payMultiplier != 1.0) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.purple,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              '${detail.payMultiplier}x',
+                                              style: AppTypography.bodySmall(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ],
@@ -587,42 +663,60 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
                               ),
                             ],
                           ),
-                          // Time Information
-                          if (detail.inTime != null || detail.outTime != null || detail.overtimeHours > 0) ...[
+                          // Time Information or Manual Hours
+                          if (detail.inTime != null || detail.outTime != null || detail.overtimeHours > 0 || detail.workedHours > 0) ...[
                             const SizedBox(height: 8),
                             Row(
                               children: [
-                                if (detail.inTime != null) ...[
+                                // Show manual worked hours if no in/out times
+                                if (detail.workedHours > 0 && detail.inTime == null && detail.outTime == null) ...[
                                   Icon(
-                                    Icons.login,
+                                    Icons.schedule,
                                     size: 14,
-                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                    color: AppColors.primaryBlue,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    'In: ${detail.inTime}',
+                                    'Worked: ${detail.workedHours.toStringAsFixed(1)}h',
                                     style: AppTypography.bodySmall(
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                      color: AppColors.primaryBlue,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                ],
-                                if (detail.outTime != null) ...[
-                                  if (detail.inTime != null) const SizedBox(width: 12),
-                                  Icon(
-                                    Icons.logout,
-                                    size: 14,
-                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Out: ${detail.outTime}',
-                                    style: AppTypography.bodySmall(
+                                ] else ...[
+                                  // Show in/out times
+                                  if (detail.inTime != null) ...[
+                                    Icon(
+                                      Icons.login,
+                                      size: 14,
                                       color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                                     ),
-                                  ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'In: ${detail.inTime}',
+                                      style: AppTypography.bodySmall(
+                                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                      ),
+                                    ),
+                                  ],
+                                  if (detail.outTime != null) ...[
+                                    if (detail.inTime != null) const SizedBox(width: 12),
+                                    Icon(
+                                      Icons.logout,
+                                      size: 14,
+                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Out: ${detail.outTime}',
+                                      style: AppTypography.bodySmall(
+                                        color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                                 if (detail.overtimeHours > 0) ...[
-                                  if (detail.inTime != null || detail.outTime != null) const SizedBox(width: 12),
+                                  if (detail.inTime != null || detail.outTime != null || detail.workedHours > 0) const SizedBox(width: 12),
                                   Icon(
                                     Icons.access_time,
                                     size: 14,

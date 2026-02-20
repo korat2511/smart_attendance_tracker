@@ -84,7 +84,7 @@ abstract class AppTypography {
   }) =>
       TextStyle(
         fontFamily: _fontFamily,
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: fontWeight ?? FontWeight.w600,
         height: height ?? 1.4,
         color: color,

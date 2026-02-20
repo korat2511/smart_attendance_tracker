@@ -290,6 +290,8 @@ class ApiService {
     required String status, // 'present', 'half_day', 'absent', 'off'
     String? inTime,
     String? outTime,
+    double? workedHours,
+    double? payMultiplier,
   }) async {
     final body = <String, dynamic>{
       'staff_id': staffId,
@@ -302,6 +304,12 @@ class ApiService {
     }
     if (outTime != null) {
       body['out_time'] = outTime;
+    }
+    if (workedHours != null && workedHours > 0) {
+      body['worked_hours'] = workedHours;
+    }
+    if (payMultiplier != null) {
+      body['pay_multiplier'] = payMultiplier;
     }
 
     final response = await _handleRequest(() async {

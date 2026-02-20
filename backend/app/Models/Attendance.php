@@ -15,12 +15,16 @@ class Attendance extends Model
         'in_time',
         'out_time',
         'overtime_hours',
+        'worked_hours',
+        'pay_multiplier',
         'advance_amount',
     ];
 
     protected $casts = [
         'date' => 'date',
         'overtime_hours' => 'decimal:2',
+        'worked_hours' => 'decimal:2',
+        'pay_multiplier' => 'decimal:2',
         'advance_amount' => 'decimal:2',
     ];
 

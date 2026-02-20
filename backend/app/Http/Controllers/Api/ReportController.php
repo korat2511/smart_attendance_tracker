@@ -51,6 +51,7 @@ class ReportController extends Controller
 
         // Calculate payment summary based on salary type
         // Basic earnings includes ALL present days (OT days are also present days)
+        // Now also applies pay_multiplier per day
         $basicEarnings = $this->calculateBasicEarnings(
             $staff->salary_type,
             $staff->salary_amount,
@@ -58,7 +59,7 @@ class ReportController extends Controller
             $halfDayCount,
             $month,
             $year,
-            $attendances // Pass attendances for hourly calculation
+            $attendances // Pass attendances for hourly calculation and pay_multiplier
         );
 
         $overtimeEarnings = $this->calculateOvertimeEarnings(
@@ -69,6 +70,10 @@ class ReportController extends Controller
         $totalEarnings = $basicEarnings + $overtimeEarnings;
         $advancePayments = $attendances->sum('advance_amount');
         $netPayment = $totalEarnings - $advancePayments;
+
+        // Calculate total worked hours and overtime hours
+        $totalWorkedHours = $this->calculateTotalWorkedHours($attendances, $staff->salary_type);
+        $totalOvertimeHours = $attendances->sum('overtime_hours');
 
         // Format attendance details
         $attendanceDetails = $attendances->map(function ($attendance) use ($staff, $month, $year) {
@@ -92,8 +97,10 @@ class ReportController extends Controller
                 $staff->overtime_charges,
                 $attendance->status,
                 $attendance->overtime_hours,
+                $attendance->worked_hours,
                 $attendance->in_time,
                 $attendance->out_time,
+                $attendance->pay_multiplier ?? 1.0,
                 $month,
                 $year
             );
@@ -105,6 +112,8 @@ class ReportController extends Controller
                 'in_time' => $attendance->in_time ? date('H:i', strtotime($attendance->in_time)) : null,
                 'out_time' => $attendance->out_time ? date('H:i', strtotime($attendance->out_time)) : null,
                 'overtime_hours' => (float) $attendance->overtime_hours,
+                'worked_hours' => (float) $attendance->worked_hours,
+                'pay_multiplier' => (float) ($attendance->pay_multiplier ?? 1.0),
                 'advance_amount' => (float) $attendance->advance_amount,
                 'daily_earnings' => round($dailyEarnings, 2),
             ];
@@ -135,6 +144,8 @@ class ReportController extends Controller
                     'total_earnings' => round($totalEarnings, 2),
                     'advance_payments' => round($advancePayments, 2),
                     'net_payment' => round($netPayment, 2),
+                    'total_worked_hours' => round($totalWorkedHours, 2),
+                    'total_overtime_hours' => round($totalOvertimeHours, 2),
                 ],
                 'attendance_details' => $attendanceDetails,
             ],
@@ -142,7 +153,39 @@ class ReportController extends Controller
     }
 
     /**
+     * Calculate total worked hours from attendance records
+     */
+    private function calculateTotalWorkedHours($attendances, string $salaryType): float
+    {
+        $totalHours = 0;
+        foreach ($attendances as $attendance) {
+            if ($attendance->status === 'present' || $attendance->status === 'half_day') {
+                // Use manual worked_hours if provided
+                if ($attendance->worked_hours > 0) {
+                    $totalHours += $attendance->worked_hours;
+                } elseif ($attendance->in_time && $attendance->out_time) {
+                    // Calculate from in/out times
+                    $inTimestamp = strtotime($attendance->in_time);
+                    $outTimestamp = strtotime($attendance->out_time);
+                    if ($outTimestamp < $inTimestamp) {
+                        $outTimestamp += 86400;
+                    }
+                    $hoursWorked = ($outTimestamp - $inTimestamp) / 3600;
+                    // Subtract overtime hours from regular hours
+                    $regularHours = max(0, $hoursWorked - ($attendance->overtime_hours ?? 0));
+                    $totalHours += $regularHours;
+                } else {
+                    // Default hours if no data available
+                    $totalHours += ($attendance->status === 'present' ? 8 : 4);
+                }
+            }
+        }
+        return $totalHours;
+    }
+
+    /**
      * Calculate basic earnings based on salary type
+     * Now applies pay_multiplier per day for custom pay rates
      */
     private function calculateBasicEarnings(
         string $salaryType,
@@ -153,47 +196,93 @@ class ReportController extends Controller
         int $year,
         $attendances = null
     ): float {
-        switch ($salaryType) {
-            case 'hourly':
-                // For hourly, calculate based on actual hours worked from attendance records
-                if ($attendances) {
-                    $totalRegularHours = 0;
-                    foreach ($attendances as $attendance) {
-                        if ($attendance->status === 'present' || $attendance->status === 'half_day') {
-                            if ($attendance->in_time && $attendance->out_time) {
+        // If we have attendance records, calculate per-day with pay_multiplier
+        if ($attendances) {
+            $totalEarnings = 0.0;
+            $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
+            
+            foreach ($attendances as $attendance) {
+                $multiplier = $attendance->pay_multiplier ?? 1.0;
+                $dayEarnings = 0.0;
+                
+                if ($attendance->status === 'present') {
+                    switch ($salaryType) {
+                        case 'hourly':
+                            if ($attendance->worked_hours > 0) {
+                                $dayEarnings = $attendance->worked_hours * $salaryAmount;
+                            } elseif ($attendance->in_time && $attendance->out_time) {
                                 $inTimestamp = strtotime($attendance->in_time);
                                 $outTimestamp = strtotime($attendance->out_time);
                                 if ($outTimestamp < $inTimestamp) {
-                                    $outTimestamp += 86400; // Add 24 hours
+                                    $outTimestamp += 86400;
                                 }
                                 $hoursWorked = ($outTimestamp - $inTimestamp) / 3600;
-                                // Subtract overtime hours from regular hours
                                 $regularHours = max(0, $hoursWorked - ($attendance->overtime_hours ?? 0));
-                                $totalRegularHours += $regularHours;
+                                $dayEarnings = $regularHours * $salaryAmount;
                             } else {
-                                // Default to 8 hours for present, 4 for half day if times not available
-                                $totalRegularHours += ($attendance->status === 'present' ? 8 : 4);
+                                $dayEarnings = 8 * $salaryAmount;
                             }
-                        }
+                            break;
+                        case 'daily':
+                            $dayEarnings = $salaryAmount;
+                            break;
+                        case 'weekly':
+                            $dayEarnings = $salaryAmount / 7;
+                            break;
+                        case 'monthly':
+                            $dayEarnings = $salaryAmount / $daysInMonth;
+                            break;
                     }
-                    return $totalRegularHours * $salaryAmount;
-                } else {
-                    // Fallback: Assuming 8 hours per day for present, 4 hours for half day
-                    $totalHours = ($presentCount * 8) + ($halfDayCount * 4);
-                    return $totalHours * $salaryAmount;
+                } elseif ($attendance->status === 'half_day') {
+                    switch ($salaryType) {
+                        case 'hourly':
+                            if ($attendance->worked_hours > 0) {
+                                $dayEarnings = $attendance->worked_hours * $salaryAmount;
+                            } elseif ($attendance->in_time && $attendance->out_time) {
+                                $inTimestamp = strtotime($attendance->in_time);
+                                $outTimestamp = strtotime($attendance->out_time);
+                                if ($outTimestamp < $inTimestamp) {
+                                    $outTimestamp += 86400;
+                                }
+                                $hoursWorked = ($outTimestamp - $inTimestamp) / 3600;
+                                $dayEarnings = $hoursWorked * $salaryAmount;
+                            } else {
+                                $dayEarnings = 4 * $salaryAmount;
+                            }
+                            break;
+                        case 'daily':
+                            $dayEarnings = $salaryAmount * 0.5;
+                            break;
+                        case 'weekly':
+                            $dayEarnings = ($salaryAmount / 7) * 0.5;
+                            break;
+                        case 'monthly':
+                            $dayEarnings = ($salaryAmount / $daysInMonth) * 0.5;
+                            break;
+                    }
                 }
+                
+                // Apply pay multiplier
+                $totalEarnings += $dayEarnings * $multiplier;
+            }
+            
+            return $totalEarnings;
+        }
+        
+        // Fallback without attendance records (no multiplier applied)
+        switch ($salaryType) {
+            case 'hourly':
+                $totalHours = ($presentCount * 8) + ($halfDayCount * 4);
+                return $totalHours * $salaryAmount;
 
             case 'daily':
-                // Present days count + half day counts as 0.5
                 return ($presentCount * $salaryAmount) + ($halfDayCount * $salaryAmount * 0.5);
 
             case 'weekly':
-                // Calculate weeks worked
                 $weeksWorked = ($presentCount + ($halfDayCount * 0.5)) / 7;
                 return $weeksWorked * $salaryAmount;
 
             case 'monthly':
-                // Monthly salary is fixed, but prorated based on present days
                 $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
                 $workingDays = $presentCount + ($halfDayCount * 0.5);
                 return ($workingDays / $daysInMonth) * $salaryAmount;
@@ -214,6 +303,7 @@ class ReportController extends Controller
 
     /**
      * Calculate daily earnings for a single attendance record
+     * Applies pay_multiplier to basic earnings (not overtime)
      */
     private function calculateDailyEarnings(
         string $salaryType,
@@ -221,12 +311,14 @@ class ReportController extends Controller
         float $overtimeRate,
         string $status,
         float $overtimeHours,
+        float $workedHours,
         $inTime,
         $outTime,
+        float $payMultiplier,
         int $month,
         int $year
     ): float {
-        $dailyEarnings = 0.0;
+        $basicEarnings = 0.0;
 
         // Calculate basic earnings for the day based on status
         switch ($status) {
@@ -234,32 +326,32 @@ class ReportController extends Controller
                 // Full day earnings
                 switch ($salaryType) {
                     case 'hourly':
-                        // For hourly, calculate based on actual hours worked if available
-                        if ($inTime && $outTime) {
+                        // Use manual worked_hours if provided
+                        if ($workedHours > 0) {
+                            $basicEarnings = $workedHours * $salaryAmount;
+                        } elseif ($inTime && $outTime) {
                             $inTimestamp = strtotime($inTime);
                             $outTimestamp = strtotime($outTime);
-                            // Handle case where out time is next day
                             if ($outTimestamp < $inTimestamp) {
-                                $outTimestamp += 86400; // Add 24 hours
+                                $outTimestamp += 86400;
                             }
                             $hoursWorked = ($outTimestamp - $inTimestamp) / 3600;
-                            // Subtract overtime hours from regular hours
                             $regularHours = max(0, $hoursWorked - $overtimeHours);
-                            $dailyEarnings = $regularHours * $salaryAmount;
+                            $basicEarnings = $regularHours * $salaryAmount;
                         } else {
-                            // Default to 8 hours if times not available
-                            $dailyEarnings = 8 * $salaryAmount;
+                            // Default to 8 hours if no data available
+                            $basicEarnings = 8 * $salaryAmount;
                         }
                         break;
                     case 'daily':
-                        $dailyEarnings = $salaryAmount;
+                        $basicEarnings = $salaryAmount;
                         break;
                     case 'weekly':
-                        $dailyEarnings = $salaryAmount / 7; // Weekly rate divided by 7 days
+                        $basicEarnings = $salaryAmount / 7;
                         break;
                     case 'monthly':
                         $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                        $dailyEarnings = $salaryAmount / $daysInMonth;
+                        $basicEarnings = $salaryAmount / $daysInMonth;
                         break;
                 }
                 break;
@@ -268,29 +360,31 @@ class ReportController extends Controller
                 // Half day earnings
                 switch ($salaryType) {
                     case 'hourly':
-                        // For hourly half day, calculate based on actual hours if available
-                        if ($inTime && $outTime) {
+                        // Use manual worked_hours if provided
+                        if ($workedHours > 0) {
+                            $basicEarnings = $workedHours * $salaryAmount;
+                        } elseif ($inTime && $outTime) {
                             $inTimestamp = strtotime($inTime);
                             $outTimestamp = strtotime($outTime);
                             if ($outTimestamp < $inTimestamp) {
                                 $outTimestamp += 86400;
                             }
                             $hoursWorked = ($outTimestamp - $inTimestamp) / 3600;
-                            $dailyEarnings = $hoursWorked * $salaryAmount;
+                            $basicEarnings = $hoursWorked * $salaryAmount;
                         } else {
                             // Default to 4 hours for half day
-                            $dailyEarnings = 4 * $salaryAmount;
+                            $basicEarnings = 4 * $salaryAmount;
                         }
                         break;
                     case 'daily':
-                        $dailyEarnings = $salaryAmount * 0.5;
+                        $basicEarnings = $salaryAmount * 0.5;
                         break;
                     case 'weekly':
-                        $dailyEarnings = ($salaryAmount / 7) * 0.5;
+                        $basicEarnings = ($salaryAmount / 7) * 0.5;
                         break;
                     case 'monthly':
                         $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                        $dailyEarnings = ($salaryAmount / $daysInMonth) * 0.5;
+                        $basicEarnings = ($salaryAmount / $daysInMonth) * 0.5;
                         break;
                 }
                 break;
@@ -298,11 +392,14 @@ class ReportController extends Controller
             case 'absent':
             case 'off':
                 // No earnings for absent or off days
-                $dailyEarnings = 0.0;
+                $basicEarnings = 0.0;
                 break;
         }
 
-        // Add overtime earnings if present (for both regular present and OT status)
+        // Apply pay multiplier to basic earnings
+        $dailyEarnings = $basicEarnings * $payMultiplier;
+
+        // Add overtime earnings if present (overtime is NOT multiplied)
         if ($status === 'present' && $overtimeHours > 0) {
             $dailyEarnings += $overtimeHours * $overtimeRate;
         }

@@ -6,6 +6,7 @@ import '../../../core/utils/responsive_utils.dart';
 import '../../../core/utils/navigation_utils.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/models/staff_model.dart';
+import '../../../core/models/attendance_model.dart';
 import '../../../core/utils/snackbar_utils.dart';
 import 'edit_staff_screen.dart';
 import 'advance_payment_bottom_sheet.dart';
@@ -26,6 +27,8 @@ class MarkAttendanceScreen extends StatefulWidget {
 }
 
 class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
+  final ScrollController _scrollController = ScrollController();
+  
   @override
   void initState() {
     super.initState();
@@ -35,7 +38,43 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         staffId: widget.staff.id ?? 0,
         month: DateTime.now(),
       );
+      // Scroll to current day after data loads
+      _scrollToCurrentDay();
     });
+  }
+  
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+  
+  void _scrollToCurrentDay() {
+    final now = DateTime.now();
+    final attendanceProvider = context.read<AttendanceProvider>();
+    final selectedMonth = attendanceProvider.selectedMonth ?? now;
+    
+    // Only scroll if viewing current month
+    if (selectedMonth.year == now.year && selectedMonth.month == now.month) {
+      // Each row is approximately 60 pixels (padding 12*2 + content ~36)
+      const double rowHeight = 60.0;
+      final targetDay = now.day;
+      
+      // Calculate scroll offset (scroll to show current day in view, not at top)
+      // Show a few days before current day for context
+      final scrollOffset = ((targetDay - 3).clamp(0, 31)) * rowHeight;
+      
+      // Delay to allow ListView to build
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (_scrollController.hasClients) {
+          _scrollController.animateTo(
+            scrollOffset,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut,
+          );
+        }
+      });
+    }
   }
 
   String _getSalaryTypeLabel(String type) {
@@ -64,6 +103,19 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       staffId: widget.staff.id ?? 0,
       month: newMonth,
     );
+    
+    // If navigating to current month, scroll to current day
+    final now = DateTime.now();
+    if (newMonth.year == now.year && newMonth.month == now.month) {
+      _scrollToCurrentDay();
+    } else {
+      // For other months, scroll to top
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (_scrollController.hasClients) {
+          _scrollController.jumpTo(0);
+        }
+      });
+    }
   }
 
   void _showMarkAttendanceBottomSheet(int day, AttendanceProvider attendanceProvider) {
@@ -80,7 +132,11 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         currentStatus: attendance?.status,
         currentInTime: attendance?.inTime,
         currentOutTime: attendance?.outTime,
-        onMark: (status, inTime, outTime, overtimeHours) async {
+        currentOvertimeHours: attendance?.overtimeHours,
+        currentWorkedHours: attendance?.workedHours,
+        currentPayMultiplier: attendance?.payMultiplier,
+        salaryType: widget.staff.salaryType,
+        onMark: (status, inTime, outTime, overtimeHours, workedHours, payMultiplier) async {
           // Close bottom sheet first
           if (NavigationUtils.canPop()) {
             NavigationUtils.pop();
@@ -94,17 +150,16 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
             }
             
             try {
-              // First mark as present if not already present
-              final attendance = attendanceProvider.attendanceMap[day];
-              if (attendance == null || attendance.status != 'P') {
-                await attendanceProvider.markAttendance(
-                  staffId: widget.staff.id ?? 0,
-                  date: date,
-                  status: 'present',
-                  inTime: inTime,
-                  outTime: outTime,
-                );
-              }
+              // Always mark as present (to save worked hours, times, and pay multiplier)
+              await attendanceProvider.markAttendance(
+                staffId: widget.staff.id ?? 0,
+                date: date,
+                status: 'present',
+                inTime: inTime,
+                outTime: outTime,
+                workedHours: workedHours,
+                payMultiplier: payMultiplier,
+              );
               
               // Then mark overtime
               await attendanceProvider.markOvertime(
@@ -145,6 +200,8 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
               status: apiStatus,
               inTime: inTime,
               outTime: outTime,
+              workedHours: workedHours,
+              payMultiplier: payMultiplier,
             );
             
             if (mounted) {
@@ -255,43 +312,14 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         icon: const Icon(Icons.arrow_back),
         onPressed: () => NavigationUtils.pop(),
       ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            widget.staff.name,
-            style: AppTypography.headlineSmall(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Text(
-                widget.staff.phoneNumber,
-                style: AppTypography.bodyMedium(
-                  color: Colors.white.withValues(alpha: 0.95),
-                ),
-              ),
-              Text(
-                ' - ',
-                style: AppTypography.bodyMedium(
-                  color: Colors.white.withValues(alpha: 0.95),
-                ),
-              ),
-              Text(
-                '₹${widget.staff.salaryAmount.toStringAsFixed(1)}/${_getSalaryTypeLabel(widget.staff.salaryType).toLowerCase()}',
-                style: AppTypography.bodyMedium(
-                  color: Colors.white.withValues(alpha: 0.95),
-                ),
-              ),
-            ],
-          ),
-        ],
+      title: Text(
+        widget.staff.name,
+        style: AppTypography.headlineSmall(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
       ),
       actions: [
         IconButton(
@@ -497,22 +525,33 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
           // Table Rows
           Expanded(
             child: ListView.builder(
+              controller: _scrollController,
               padding: EdgeInsets.zero,
               itemCount: daysInMonth,
               itemBuilder: (context, index) {
                 final day = index + 1;
                 final attendance = attendanceProvider.attendanceMap[day];
-                final selectedStatus = attendance?.status;
                 final advanceAmount = attendanceProvider.advanceMap[day] ?? 0.0;
+                
+                // Check if this is today
+                final now = DateTime.now();
+                final isToday = selectedMonth.year == now.year && 
+                               selectedMonth.month == now.month && 
+                               day == now.day;
                 
                 return Container(
                   decoration: BoxDecoration(
-                    color: isDark ? AppColors.surfaceVariantDark : Colors.white,
+                    color: isToday 
+                        ? AppColors.primaryBlue.withValues(alpha: isDark ? 0.2 : 0.1)
+                        : (isDark ? AppColors.surfaceVariantDark : Colors.white),
                     border: Border(
                       bottom: BorderSide(
                         color: isDark ? AppColors.borderDark : AppColors.borderLight,
                         width: 1,
                       ),
+                      left: isToday 
+                          ? BorderSide(color: AppColors.primaryBlue, width: 4)
+                          : BorderSide.none,
                     ),
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -527,14 +566,18 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                             Text(
                               day.toString().padLeft(2, '0'),
                               style: AppTypography.titleMedium(
-                                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                color: isToday
+                                    ? AppColors.primaryBlue
+                                    : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             Text(
                               _getDayName(day, selectedMonth),
                               style: AppTypography.bodySmall(
-                                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                color: isToday 
+                                    ? AppColors.primaryBlue.withValues(alpha: 0.8) 
+                                    : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
                               ),
                             ),
                           ],
@@ -545,84 +588,7 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                       Expanded(
                         child: GestureDetector(
                           onTap: () => _showMarkAttendanceBottomSheet(day, attendanceProvider),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: selectedStatus == 'P' || selectedStatus == 'OT'
-                                  ? AppColors.successGreen.withValues(alpha: 0.1)
-                                  : selectedStatus == 'HD'
-                                      ? Colors.blue.withValues(alpha: 0.1)
-                                      : selectedStatus == 'A'
-                                          ? AppColors.warningRed.withValues(alpha: 0.1)
-                                          : selectedStatus == 'Off'
-                                              ? Colors.purple.withValues(alpha: 0.1)
-                                              : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: selectedStatus == 'P' || selectedStatus == 'OT'
-                                    ? AppColors.successGreen
-                                    : selectedStatus == 'HD'
-                                        ? Colors.blue
-                                        : selectedStatus == 'A'
-                                            ? AppColors.warningRed
-                                            : selectedStatus == 'Off'
-                                                ? Colors.purple
-                                                : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                if (selectedStatus != null) ...[
-                                  Icon(
-                                    selectedStatus == 'P' || selectedStatus == 'OT'
-                                        ? Icons.check_circle
-                                        : selectedStatus == 'HD'
-                                            ? Icons.access_time
-                                            : selectedStatus == 'A'
-                                                ? Icons.cancel
-                                                : Icons.event_busy,
-                                    size: 16,
-                                    color: selectedStatus == 'P' || selectedStatus == 'OT'
-                                        ? AppColors.successGreen
-                                        : selectedStatus == 'HD'
-                                            ? Colors.blue
-                                            : selectedStatus == 'A'
-                                                ? AppColors.warningRed
-                                                : Colors.purple,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    selectedStatus,
-                                    style: AppTypography.bodyMedium(
-                                      color: selectedStatus == 'P' || selectedStatus == 'OT'
-                                          ? AppColors.successGreen
-                                          : selectedStatus == 'HD'
-                                              ? Colors.blue
-                                              : selectedStatus == 'A'
-                                                  ? AppColors.warningRed
-                                                  : Colors.purple,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ] else ...[
-                                  Icon(
-                                    Icons.add_circle_outline,
-                                    size: 16,
-                                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Tap to mark',
-                                    style: AppTypography.bodySmall(
-                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
+                          child: _buildAttendanceStatusBadge(attendance, isDark),
                         ),
                       ),
                       
@@ -709,6 +675,85 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
               textAlign: TextAlign.right,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttendanceStatusBadge(AttendanceModel? attendance, bool isDark) {
+    final status = attendance?.status;
+    final displayStatus = attendance?.displayStatus;
+    final hasOvertime = attendance?.hasOvertime ?? false;
+    final overtimeHours = attendance?.overtimeHours ?? 0.0;
+    
+    Color statusColor;
+    IconData statusIcon;
+    
+    if (status == 'P' || status == 'OT' || hasOvertime) {
+      statusColor = AppColors.successGreen;
+      statusIcon = Icons.check_circle;
+    } else if (status == 'HD') {
+      statusColor = Colors.blue;
+      statusIcon = Icons.access_time;
+    } else if (status == 'A') {
+      statusColor = AppColors.warningRed;
+      statusIcon = Icons.cancel;
+    } else if (status == 'Off') {
+      statusColor = Colors.purple;
+      statusIcon = Icons.event_busy;
+    } else {
+      statusColor = isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight;
+      statusIcon = Icons.add_circle_outline;
+    }
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: status != null ? statusColor.withValues(alpha: 0.1) : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: statusColor,
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (status != null) ...[
+            Icon(statusIcon, size: 16, color: statusColor),
+            const SizedBox(width: 4),
+            Text(
+              displayStatus ?? status,
+              style: AppTypography.bodyMedium(
+                color: statusColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (hasOvertime && overtimeHours > 0) ...[
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.orange,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${overtimeHours.toStringAsFixed(1)}h',
+                  style: AppTypography.bodySmall(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ] else ...[
+            Icon(statusIcon, size: 16, color: statusColor),
+            const SizedBox(width: 4),
+            Text(
+              'Tap to mark',
+              style: AppTypography.bodySmall(color: statusColor),
+            ),
+          ],
         ],
       ),
     );
