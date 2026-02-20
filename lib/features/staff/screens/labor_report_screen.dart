@@ -179,10 +179,9 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
 
   PreferredSizeWidget _buildAppBar(BuildContext context, ThemeData theme, bool isDark) {
     return AppBar(
-      backgroundColor: AppColors.primaryBlue,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        icon: const Icon(Icons.arrow_back),
         onPressed: () => NavigationUtils.pop(),
       ),
       title: Text(
@@ -194,7 +193,7 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.share, color: Colors.white),
+          icon: const Icon(Icons.share),
           onPressed: () {
             // TODO: Implement share functionality
           },

@@ -95,7 +95,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
-                _buildSectionTitle(context, 'Account'),
+                _buildSectionTitle(context, 'Session'),
                 _buildSettingTile(
                   context,
                   icon: Icons.logout,

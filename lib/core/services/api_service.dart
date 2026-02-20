@@ -7,6 +7,7 @@ import '../models/auth_response_model.dart';
 import '../models/staff_model.dart';
 import '../models/attendance_model.dart';
 import '../models/report_model.dart';
+import '../models/cashbook_model.dart';
 import '../services/storage_service.dart';
 
 class ApiService {
@@ -374,6 +375,69 @@ class ApiService {
     );
   }
 
+  Future<AttendanceModel> markAdvance({
+    required int staffId,
+    required DateTime date,
+    required double amount,
+    String? notes,
+  }) async {
+    final body = <String, dynamic>{
+      'staff_id': staffId,
+      'date': date.toIso8601String().split('T')[0],
+      'amount': amount,
+    };
+    if (notes != null && notes.trim().isNotEmpty) {
+      body['notes'] = notes.trim();
+    }
+
+    final response = await _handleRequest(() async {
+      return await http.post(
+        Uri.parse('${ApiConstants.basePath}/attendance/advance'),
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode(body),
+      );
+    });
+
+    final json = _handleResponse<Map<String, dynamic>>(
+      response,
+      (json) => json,
+    );
+
+    final attendanceData = json['data']?['attendance'] as Map<String, dynamic>?;
+    if (attendanceData == null) {
+      throw ApiException(
+        message: 'Invalid response format',
+        statusCode: response.statusCode,
+        type: ApiExceptionType.parseError,
+      );
+    }
+
+    final statusValue = attendanceData['status'] as String? ?? '';
+    String displayStatus = statusValue;
+    if (statusValue == 'present' && ((attendanceData['overtime_hours'] as num?)?.toDouble() ?? 0) > 0) {
+      displayStatus = 'OT';
+    } else if (statusValue == 'present') {
+      displayStatus = 'P';
+    } else if (statusValue == 'half_day') {
+      displayStatus = 'HD';
+    } else if (statusValue == 'absent') {
+      displayStatus = 'A';
+    } else if (statusValue == 'off') {
+      displayStatus = 'Off';
+    }
+
+    return AttendanceModel(
+      id: attendanceData['id'] as int?,
+      staffId: staffId,
+      date: DateTime.parse(attendanceData['date'] as String),
+      status: displayStatus,
+      inTime: attendanceData['in_time'] as String?,
+      outTime: attendanceData['out_time'] as String?,
+      overtimeHours: (attendanceData['overtime_hours'] as num?)?.toDouble() ?? 0.0,
+      advanceAmount: (attendanceData['advance_amount'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+
   Future<Map<String, dynamic>> getAttendance({
     required int staffId,
     int? month,
@@ -491,6 +555,102 @@ class ApiService {
     }
 
     return LaborReportModel.fromJson(data);
+  }
+
+  // Cashbook APIs (income, expenses; advances appear as expenses automatically)
+  Future<CashbookOverviewModel> getCashbookOverview({
+    required int month,
+    required int year,
+  }) async {
+    final uri = Uri.parse('${ApiConstants.basePath}/cashbook/overview').replace(
+      queryParameters: {'month': month.toString(), 'year': year.toString()},
+    );
+    final response = await _handleRequest(() async {
+      return await http.get(
+        uri,
+        headers: await _getHeaders(includeAuth: true),
+      );
+    });
+
+    final json = _handleResponse<Map<String, dynamic>>(response, (json) => json);
+    final data = json['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw ApiException(
+        message: 'Invalid response format',
+        statusCode: response.statusCode,
+        type: ApiExceptionType.parseError,
+      );
+    }
+    return CashbookOverviewModel.fromJson(data);
+  }
+
+  Future<List<CashbookTransactionModel>> getCashbookTransactions({
+    required int month,
+    required int year,
+  }) async {
+    final uri = Uri.parse('${ApiConstants.basePath}/cashbook/transactions').replace(
+      queryParameters: {'month': month.toString(), 'year': year.toString()},
+    );
+    final response = await _handleRequest(() async {
+      return await http.get(
+        uri,
+        headers: await _getHeaders(includeAuth: true),
+      );
+    });
+
+    final json = _handleResponse<Map<String, dynamic>>(response, (json) => json);
+    final data = json['data'] as Map<String, dynamic>?;
+    if (data == null) {
+      throw ApiException(
+        message: 'Invalid response format',
+        statusCode: response.statusCode,
+        type: ApiExceptionType.parseError,
+      );
+    }
+    final list = data['transactions'] as List<dynamic>? ?? [];
+    return list
+        .map((e) => CashbookTransactionModel.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> addCashbookIncome({
+    required DateTime date,
+    required double amount,
+    String? description,
+  }) async {
+    final body = <String, dynamic>{
+      'date': date.toIso8601String().split('T')[0],
+      'amount': amount,
+    };
+    if (description != null && description.isNotEmpty) body['description'] = description;
+
+    await _handleRequest(() async {
+      return await http.post(
+        Uri.parse('${ApiConstants.basePath}/cashbook/income'),
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode(body),
+      );
+    });
+  }
+
+  Future<void> addCashbookExpense({
+    required DateTime date,
+    required double amount,
+    String? description,
+  }) async {
+    final body = <String, dynamic>{
+      'date': date.toIso8601String().split('T')[0],
+      'amount': amount,
+    };
+    if (description != null && description.isNotEmpty) body['description'] = description;
+
+    await _handleRequest(() async {
+      return await http.post(
+        Uri.parse('${ApiConstants.basePath}/cashbook/expense'),
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode(body),
+      );
+    });
   }
 
   T _handleResponse<T>(

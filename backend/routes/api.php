@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\StaffController;
 use App\Http\Controllers\Api\AttendanceController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\CashbookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -52,12 +53,21 @@ Route::prefix('v1')->group(function () {
         Route::prefix('attendance')->group(function () {
             Route::post('/mark', [AttendanceController::class, 'markAttendance']);
             Route::post('/mark-ot', [AttendanceController::class, 'markOT']);
+            Route::post('/advance', [AttendanceController::class, 'markAdvance']);
             Route::get('/staff/{staffId}', [AttendanceController::class, 'getAttendance']);
         });
         
         // Report routes
         Route::prefix('report')->group(function () {
             Route::get('/labor/{staffId}', [ReportController::class, 'getLaborReport']);
+        });
+
+        // Cashbook routes (income, expenses; advances appear as expenses automatically)
+        Route::prefix('cashbook')->group(function () {
+            Route::get('/overview', [CashbookController::class, 'getOverview']);
+            Route::get('/transactions', [CashbookController::class, 'getTransactions']);
+            Route::post('/income', [CashbookController::class, 'addIncome']);
+            Route::post('/expense', [CashbookController::class, 'addExpense']);
         });
         
         // Profile routes

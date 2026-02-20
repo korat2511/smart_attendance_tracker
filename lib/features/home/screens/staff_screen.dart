@@ -287,21 +287,18 @@ class _StaffScreenState extends State<StaffScreen> {
     return RefreshIndicator(
       onRefresh: () => staffProvider.refreshStaffList(),
       color: AppColors.primaryBlue,
-      child: CustomScrollView(
-        slivers: [
-          SliverPadding(
-            padding: EdgeInsets.all(ResponsiveUtils.horizontalPadding(context)),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final staff = staffList[index];
-                  return _buildStaffCard(context, theme, isDark, staff);
-                },
-                childCount: staffList.length,
-              ),
-            ),
-          ),
-        ],
+      child: ListView.builder(
+        padding: EdgeInsets.fromLTRB(
+          ResponsiveUtils.horizontalPadding(context),
+          8,
+          ResponsiveUtils.horizontalPadding(context),
+          80,
+        ),
+        itemCount: staffList.length,
+        itemBuilder: (context, index) {
+          final staff = staffList[index];
+          return _buildStaffCard(context, theme, isDark, staff);
+        },
       ),
     );
   }
@@ -327,138 +324,139 @@ class _StaffScreenState extends State<StaffScreen> {
       }
     }
 
+    // Ref: clear border, bold dark name, lighter secondary line
+    final borderColor = isDark ? AppColors.borderDark : const Color(0xFFBDBDBD);
+    final nameColor = isDark ? AppColors.textPrimaryDark : const Color(0xFF1A1A1A);
+    final secondaryColor = isDark ? AppColors.textSecondaryLight : const Color(0xFF5F6368);
+
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
       elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(10),
         side: BorderSide(
-          color: isDark
-              ? AppColors.surfaceDark.withValues(alpha: 0.5)
-              : AppColors.borderLight,
-          width: 1,
+          color: borderColor,
+          width: 1.2,
         ),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-        leading: CircleAvatar(
-          backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
-          radius: 24,
-          child: Text(
-            staff.name.isNotEmpty ? staff.name[0].toUpperCase() : '?',
-            style: AppTypography.titleMedium(
-              color: AppColors.primaryBlue,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
-        title: Text(
-          staff.name,
-          style: AppTypography.bodyLarge(
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(
-                  Icons.phone_outlined,
-                  size: 14,
-                  color: isDark
-                      ? AppColors.textSecondaryDark
-                      : AppColors.textSecondaryLight,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  staff.phoneNumber,
-                  style: AppTypography.bodySmall(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Text(
-                  '₹',
-                  style: AppTypography.bodySmall(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 2),
-                Text(
-                  '${staff.salaryAmount.toStringAsFixed(2)}/${getSalaryTypeLabel(staff.salaryType).toLowerCase()}',
-                  style: AppTypography.bodySmall(
-                    color: isDark
-                        ? AppColors.textSecondaryDark
-                        : AppColors.textSecondaryLight,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        trailing: PopupMenuButton<String>(
-          icon: Icon(
-            Icons.more_vert,
-            color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
-          ),
-          onSelected: (value) async {
-            if (value == 'attendance') {
-              await _handleMarkAttendance(context, staff);
-            } else if (value == 'edit') {
-              await _handleEditStaff(context, staff);
-            } else if (value == 'delete') {
-              await _handleDeleteStaff(context, staff);
-            }
-          },
-          itemBuilder: (context) => [
-            const PopupMenuItem<String>(
-              value: 'attendance',
-              child: Row(
-                children: [
-                  Icon(Icons.calendar_today_outlined, size: 20),
-                  SizedBox(width: 8),
-                  Text('Mark Attendance'),
-                ],
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'edit',
-              child: Row(
-                children: [
-                  Icon(Icons.edit_outlined, size: 20),
-                  SizedBox(width: 8),
-                  Text('Edit'),
-                ],
-              ),
-            ),
-            const PopupMenuItem<String>(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete_outline, size: 20, color: AppColors.warningRed),
-                  SizedBox(width: 8),
-                  Text('Delete', style: TextStyle(color: AppColors.warningRed)),
-                ],
-              ),
-            ),
-          ],
-        ),
+      child: InkWell(
         onTap: () => _handleMarkAttendance(context, staff),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: AppColors.primaryBlueDark,
+                radius: 20,
+                child: Text(
+                  staff.name.isNotEmpty ? staff.name[0].toUpperCase() : '?',
+                  style: AppTypography.titleSmall(
+                    color: AppColors.surfaceLight,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      staff.name,
+                      style: AppTypography.titleLarge(
+                        color: nameColor,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.phone_outlined,
+                          size: 12,
+                          color: secondaryColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            staff.phoneNumber,
+                            style: AppTypography.bodySmall(
+                              color: secondaryColor,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          '₹${staff.salaryAmount.toStringAsFixed(0)}/${getSalaryTypeLabel(staff.salaryType).toLowerCase()}',
+                          style: AppTypography.bodySmall(
+                            color: secondaryColor,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 40),
+                icon: Icon(
+                  Icons.more_vert,
+                  size: 20,
+                  color: secondaryColor,
+                ),
+                onSelected: (value) async {
+                  if (value == 'attendance') {
+                    await _handleMarkAttendance(context, staff);
+                  } else if (value == 'edit') {
+                    await _handleEditStaff(context, staff);
+                  } else if (value == 'delete') {
+                    await _handleDeleteStaff(context, staff);
+                  }
+                },
+                itemBuilder: (context) => [
+                  const PopupMenuItem<String>(
+                    value: 'attendance',
+                    child: Row(
+                      children: [
+                        Icon(Icons.calendar_today_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Mark Attendance'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'edit',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Edit'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 20, color: AppColors.warningRed),
+                        SizedBox(width: 8),
+                        Text('Delete', style: TextStyle(color: AppColors.warningRed)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

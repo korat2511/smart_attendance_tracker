@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/utils/responsive_utils.dart';
 import '../../../core/utils/navigation_utils.dart';
+import '../../../core/utils/snackbar_utils.dart';
 
 class MarkAttendanceBottomSheet extends StatefulWidget {
   final DateTime date;
@@ -135,17 +136,13 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
 
     // Validation for Present/Half Day/OT status
     if ((statusToMark == 'P' || statusToMark == 'HD' || statusToMark == 'OT') && _inTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select check-in time')),
-      );
+      SnackbarUtils.showError('Please select check-in time');
       return;
     }
 
     // Validation for OT status
     if (statusToMark == 'OT' && (_overtimeHours == null || _overtimeHours! <= 0)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter overtime hours')),
-      );
+      SnackbarUtils.showError('Please enter overtime hours');
       return;
     }
 

@@ -5,7 +5,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/focus_utils.dart';
 import '../providers/home_provider.dart';
 import 'staff_screen.dart';
-import 'expenses_screen.dart';
+import 'cashbook_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -13,7 +13,7 @@ class HomeScreen extends StatelessWidget {
 
   final List<Widget> _screens = const [
     StaffScreen(),
-    ExpensesScreen(),
+    CashbookScreen(),
     SettingsScreen(),
   ];
 

@@ -8,6 +8,7 @@ import 'features/staff/providers/staff_provider.dart';
 import 'features/staff/providers/attendance_provider.dart';
 import 'features/staff/providers/report_provider.dart';
 import 'features/home/providers/home_provider.dart';
+import 'features/home/providers/cashbook_provider.dart';
 
 void main() {
   runApp(const SmartAttendanceTrackerApp());
@@ -25,6 +26,7 @@ class SmartAttendanceTrackerApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AttendanceProvider()),
         ChangeNotifierProvider(create: (_) => ReportProvider()),
         ChangeNotifierProvider(create: (_) => HomeProvider()),
+        ChangeNotifierProvider(create: (_) => CashbookProvider()),
           ],
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, _) {

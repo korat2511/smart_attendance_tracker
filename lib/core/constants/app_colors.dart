@@ -55,11 +55,14 @@ abstract class AppColors {
   static const Color surfaceVariantLight = Color(0xFFF1F3F4);
 
   // --- Backgrounds (Dark theme) ---
+  /// Main scaffold background (deep dark)
   static const Color backgroundDark = Color(0xFF121212);
 
-  static const Color surfaceDark = Color(0xFF1E1E1E);
+  /// Cards, app bar, elevated surfaces (clearly above background)
+  static const Color surfaceDark = Color(0xFF252525);
 
-  static const Color surfaceVariantDark = Color(0xFF2C2C2C);
+  /// List rows, list tiles, secondary surfaces (one step above surface)
+  static const Color surfaceVariantDark = Color(0xFF2E2E2E);
 
   // --- Text ---
   static const Color textPrimaryLight = Color(0xFF202124);
@@ -73,7 +76,8 @@ abstract class AppColors {
   // --- Borders & Dividers ---
   static const Color borderLight = Color(0xFFDADCE0);
 
-  static const Color borderDark = Color(0xFF3C4043);
+  /// Visible borders in dark theme for separation and hierarchy
+  static const Color borderDark = Color(0xFF434343);
 
   // --- Other ---
   static const Color error = Color(0xFFB00020);

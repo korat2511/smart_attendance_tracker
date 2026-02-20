@@ -6,3 +6,4 @@ export 'user_model.dart';
 export 'staff_model.dart';
 export 'attendance_model.dart';
 export 'report_model.dart';
+export 'cashbook_model.dart';

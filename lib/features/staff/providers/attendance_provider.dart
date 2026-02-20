@@ -123,6 +123,33 @@ class AttendanceProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> markAdvance({
+    required int staffId,
+    required DateTime date,
+    required double amount,
+    String? notes,
+  }) async {
+    try {
+      await ApiService().markAdvance(
+        staffId: staffId,
+        date: date,
+        amount: amount,
+        notes: notes,
+      );
+
+      if (_selectedMonth != null) {
+        await loadAttendanceData(
+          staffId: staffId,
+          month: _selectedMonth!,
+        );
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   void changeMonth(DateTime newMonth) {
     _selectedMonth = newMonth;
     notifyListeners();

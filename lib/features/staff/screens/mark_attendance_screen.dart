@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/focus_utils.dart';
@@ -9,6 +8,7 @@ import '../../../core/typography/app_typography.dart';
 import '../../../core/models/staff_model.dart';
 import '../../../core/utils/snackbar_utils.dart';
 import 'edit_staff_screen.dart';
+import 'advance_payment_bottom_sheet.dart';
 import 'labor_report_screen.dart';
 import 'mark_attendance_bottom_sheet.dart';
 import '../providers/attendance_provider.dart';
@@ -160,8 +160,37 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     );
   }
 
-
-
+  void _showAdvancePaymentBottomSheet(
+    BuildContext context,
+    int year,
+    int month,
+    int day,
+    double currentAdvance,
+    AttendanceProvider attendanceProvider,
+  ) {
+    final date = DateTime(year, month, day);
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => AdvancePaymentBottomSheet(
+        date: date,
+        initialAmount: currentAdvance,
+        initialNotes: null,
+        onSave: (amount, notes) async {
+          await attendanceProvider.markAdvance(
+            staffId: widget.staff.id ?? 0,
+            date: date,
+            amount: amount,
+            notes: notes,
+          );
+          if (context.mounted) {
+            SnackbarUtils.showSuccess('Advance marked successfully');
+          }
+        },
+      ),
+    );
+  }
 
   String _getDayName(int day, DateTime selectedMonth) {
     final date = DateTime(selectedMonth.year, selectedMonth.month, day);
@@ -221,10 +250,9 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
 
   PreferredSizeWidget _buildAppBar(BuildContext context, ThemeData theme, bool isDark) {
     return AppBar(
-      backgroundColor: AppColors.primaryBlue,
       elevation: 0,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back, color: Colors.white),
+        icon: const Icon(Icons.arrow_back),
         onPressed: () => NavigationUtils.pop(),
       ),
       title: Column(
@@ -267,7 +295,7 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.edit, color: Colors.white),
+          icon: const Icon(Icons.edit),
           onPressed: () {
             NavigationUtils.push(
               EditStaffScreen(staff: widget.staff),
@@ -350,13 +378,16 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: isDark ? Border.all(color: AppColors.borderDark, width: 1) : null,
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -476,10 +507,10 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                 
                 return Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: isDark ? AppColors.surfaceVariantDark : Colors.white,
                     border: Border(
                       bottom: BorderSide(
-                        color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                        color: isDark ? AppColors.borderDark : AppColors.borderLight,
                         width: 1,
                       ),
                     ),
@@ -595,15 +626,28 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                         ),
                       ),
                       
-                // Advance Column
+                // Advance Column - tap amount to mark advance
                 SizedBox(
                   width: 80,
-                  child: Text(
-                    advanceAmount > 0 ? '₹${advanceAmount.toStringAsFixed(2)}' : '₹0.00',
-                    style: AppTypography.bodyMedium(
-                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                  child: GestureDetector(
+                    onTap: () => _showAdvancePaymentBottomSheet(
+                      context,
+                      selectedMonth.year,
+                      selectedMonth.month,
+                      day,
+                      advanceAmount,
+                      attendanceProvider,
                     ),
-                    textAlign: TextAlign.right,
+                    child: Text(
+                      advanceAmount > 0 ? '₹${advanceAmount.toStringAsFixed(2)}' : '₹0.00',
+                      style: AppTypography.bodyMedium(
+                        color: advanceAmount > 0
+                            ? AppColors.primaryBlue
+                            : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+                        fontWeight: advanceAmount > 0 ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
                   ),
                 ),
                     ],
@@ -620,10 +664,10 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   Widget _buildTableHeader(BuildContext context, ThemeData theme, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isDark ? AppColors.surfaceDark : Colors.white,
         border: Border(
           bottom: BorderSide(
-            color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+            color: isDark ? AppColors.borderDark : AppColors.borderLight,
             width: 1,
           ),
         ),

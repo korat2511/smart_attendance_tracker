@@ -214,4 +214,58 @@ class AttendanceController extends Controller
             ],
         ], 200);
     }
+
+    /**
+     * Mark advance payment for a date
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function markAdvance(Request $request)
+    {
+        $validated = $request->validate([
+            'staff_id' => 'required|integer|exists:staff,id',
+            'date' => 'required|date',
+            'amount' => 'required|numeric|min:0',
+            'notes' => 'nullable|string|max:500',
+        ]);
+
+        $staff = Staff::where('id', $validated['staff_id'])
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
+
+        $attendance = Attendance::where('staff_id', $validated['staff_id'])
+            ->where('date', $validated['date'])
+            ->first();
+
+        if ($attendance) {
+            $attendance->update([
+                'advance_amount' => $validated['amount'],
+            ]);
+        } else {
+            $attendance = Attendance::create([
+                'staff_id' => $validated['staff_id'],
+                'date' => $validated['date'],
+                'status' => 'absent',
+                'advance_amount' => $validated['amount'],
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Advance marked successfully',
+            'data' => [
+                'attendance' => [
+                    'id' => $attendance->id,
+                    'staff_id' => $attendance->staff_id,
+                    'date' => $attendance->date->format('Y-m-d'),
+                    'status' => $attendance->status,
+                    'in_time' => $attendance->in_time ? date('H:i', strtotime($attendance->in_time)) : null,
+                    'out_time' => $attendance->out_time ? date('H:i', strtotime($attendance->out_time)) : null,
+                    'overtime_hours' => (float) $attendance->overtime_hours,
+                    'advance_amount' => (float) $attendance->advance_amount,
+                ],
+            ],
+        ], 200);
+    }
 }

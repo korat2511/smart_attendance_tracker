@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/focus_utils.dart';
 import '../../../core/utils/responsive_utils.dart';
 import '../../../core/utils/navigation_utils.dart';
+import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/widgets/loading_button.dart';
 import 'manual_add_staff_screen.dart';
@@ -105,12 +106,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     
     final phone = _getContactPhone(contact);
     if (phone == 'No phone number') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Selected contact has no phone number'),
-          backgroundColor: AppColors.warningRed,
-        ),
-      );
+      SnackbarUtils.showError('Selected contact has no phone number');
       return;
     }
 
