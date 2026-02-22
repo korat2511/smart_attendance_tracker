@@ -49,9 +49,13 @@ class ReportController extends Controller
         $weekOffCount = $attendances->where('status', 'off')->count();
         $halfDayCount = $attendances->where('status', 'half_day')->count();
 
+        // Working days = days in month minus off days (off days are not counted for monthly/weekly pay)
+        $daysInMonth = (int) cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $workingDaysInMonth = $daysInMonth - $weekOffCount;
+
         // Calculate payment summary based on salary type
         // Basic earnings includes ALL present days (OT days are also present days)
-        // Now also applies pay_multiplier per day
+        // Now also applies pay_multiplier per day; monthly/weekly use working days (exclude off)
         $basicEarnings = $this->calculateBasicEarnings(
             $staff->salary_type,
             $staff->salary_amount,
@@ -59,7 +63,8 @@ class ReportController extends Controller
             $halfDayCount,
             $month,
             $year,
-            $attendances // Pass attendances for hourly calculation and pay_multiplier
+            $attendances, // Pass attendances for hourly calculation and pay_multiplier
+            $weekOffCount
         );
 
         $overtimeEarnings = $this->calculateOvertimeEarnings(
@@ -102,7 +107,8 @@ class ReportController extends Controller
                 $attendance->out_time,
                 $attendance->pay_multiplier ?? 1.0,
                 $month,
-                $year
+                $year,
+                $weekOffCount
             );
 
             return [
@@ -137,6 +143,8 @@ class ReportController extends Controller
                     'overtime' => $overtimeCount,
                     'week_off' => $weekOffCount,
                     'half_day' => $halfDayCount,
+                    'days_in_month' => $daysInMonth,
+                    'working_days' => $workingDaysInMonth,
                 ],
                 'payment_summary' => [
                     'basic_earnings' => round($basicEarnings, 2),
@@ -194,13 +202,16 @@ class ReportController extends Controller
         int $halfDayCount,
         int $month,
         int $year,
-        $attendances = null
+        $attendances = null,
+        int $offCount = 0
     ): float {
+        $daysInMonth = (int) cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $workingDaysInMonth = $daysInMonth - $offCount;
+
         // If we have attendance records, calculate per-day with pay_multiplier
         if ($attendances) {
             $totalEarnings = 0.0;
-            $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-            
+
             foreach ($attendances as $attendance) {
                 $multiplier = $attendance->pay_multiplier ?? 1.0;
                 $dayEarnings = 0.0;
@@ -230,7 +241,7 @@ class ReportController extends Controller
                             $dayEarnings = $salaryAmount / 7;
                             break;
                         case 'monthly':
-                            $dayEarnings = $salaryAmount / $daysInMonth;
+                            $dayEarnings = $workingDaysInMonth > 0 ? $salaryAmount / $workingDaysInMonth : 0;
                             break;
                     }
                 } elseif ($attendance->status === 'half_day') {
@@ -257,7 +268,7 @@ class ReportController extends Controller
                             $dayEarnings = ($salaryAmount / 7) * 0.5;
                             break;
                         case 'monthly':
-                            $dayEarnings = ($salaryAmount / $daysInMonth) * 0.5;
+                            $dayEarnings = $workingDaysInMonth > 0 ? ($salaryAmount / $workingDaysInMonth) * 0.5 : 0;
                             break;
                     }
                 }
@@ -283,9 +294,8 @@ class ReportController extends Controller
                 return $weeksWorked * $salaryAmount;
 
             case 'monthly':
-                $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
                 $workingDays = $presentCount + ($halfDayCount * 0.5);
-                return ($workingDays / $daysInMonth) * $salaryAmount;
+                return $workingDaysInMonth > 0 ? ($workingDays / $workingDaysInMonth) * $salaryAmount : 0;
 
             default:
                 return 0.0;
@@ -316,9 +326,12 @@ class ReportController extends Controller
         $outTime,
         float $payMultiplier,
         int $month,
-        int $year
+        int $year,
+        int $offCount = 0
     ): float {
         $basicEarnings = 0.0;
+        $daysInMonth = (int) cal_days_in_month(CAL_GREGORIAN, $month, $year);
+        $workingDaysInMonth = $daysInMonth - $offCount;
 
         // Calculate basic earnings for the day based on status
         switch ($status) {
@@ -350,8 +363,7 @@ class ReportController extends Controller
                         $basicEarnings = $salaryAmount / 7;
                         break;
                     case 'monthly':
-                        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                        $basicEarnings = $salaryAmount / $daysInMonth;
+                        $basicEarnings = $workingDaysInMonth > 0 ? $salaryAmount / $workingDaysInMonth : 0;
                         break;
                 }
                 break;
@@ -383,8 +395,7 @@ class ReportController extends Controller
                         $basicEarnings = ($salaryAmount / 7) * 0.5;
                         break;
                     case 'monthly':
-                        $daysInMonth = cal_days_in_month(CAL_GREGORIAN, $month, $year);
-                        $basicEarnings = ($salaryAmount / $daysInMonth) * 0.5;
+                        $basicEarnings = $workingDaysInMonth > 0 ? ($salaryAmount / $workingDaysInMonth) * 0.5 : 0;
                         break;
                 }
                 break;

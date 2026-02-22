@@ -361,6 +361,23 @@ class ApiService {
     );
   }
 
+  Future<void> clearAttendance({
+    required int staffId,
+    required DateTime date,
+  }) async {
+    final response = await _handleRequest(() async {
+      return await http.post(
+        Uri.parse('${ApiConstants.basePath}/attendance/clear'),
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode({
+          'staff_id': staffId,
+          'date': date.toIso8601String().split('T')[0],
+        }),
+      );
+    });
+    _handleResponse<Map<String, dynamic>>(response, (json) => json);
+  }
+
   Future<AttendanceModel> markOT({
     required int staffId,
     required DateTime date,
@@ -465,6 +482,25 @@ class ApiService {
       overtimeHours: (attendanceData['overtime_hours'] as num?)?.toDouble() ?? 0.0,
       advanceAmount: (attendanceData['advance_amount'] as num?)?.toDouble() ?? 0.0,
     );
+  }
+
+  Future<void> updateAdvance(int attendanceId, double amount) async {
+    await _handleRequest(() async {
+      return await http.put(
+        Uri.parse('${ApiConstants.basePath}/attendance/advance/$attendanceId'),
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode({'amount': amount}),
+      );
+    });
+  }
+
+  Future<void> clearAdvance(int attendanceId) async {
+    await _handleRequest(() async {
+      return await http.delete(
+        Uri.parse('${ApiConstants.basePath}/attendance/advance/$attendanceId'),
+        headers: await _getHeaders(includeAuth: true),
+      );
+    });
   }
 
   Future<Map<String, dynamic>> getAttendance({
@@ -662,6 +698,36 @@ class ApiService {
     });
   }
 
+  Future<void> updateCashbookIncome({
+    required int id,
+    required DateTime date,
+    required double amount,
+    String? description,
+  }) async {
+    final body = <String, dynamic>{
+      'date': date.toIso8601String().split('T')[0],
+      'amount': amount,
+    };
+    if (description != null && description.isNotEmpty) body['description'] = description;
+
+    await _handleRequest(() async {
+      return await http.put(
+        Uri.parse('${ApiConstants.basePath}/cashbook/income/$id'),
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode(body),
+      );
+    });
+  }
+
+  Future<void> deleteCashbookIncome(int id) async {
+    await _handleRequest(() async {
+      return await http.delete(
+        Uri.parse('${ApiConstants.basePath}/cashbook/income/$id'),
+        headers: await _getHeaders(includeAuth: true),
+      );
+    });
+  }
+
   Future<void> addCashbookExpense({
     required DateTime date,
     required double amount,
@@ -678,6 +744,36 @@ class ApiService {
         Uri.parse('${ApiConstants.basePath}/cashbook/expense'),
         headers: await _getHeaders(includeAuth: true),
         body: jsonEncode(body),
+      );
+    });
+  }
+
+  Future<void> updateCashbookExpense({
+    required int id,
+    required DateTime date,
+    required double amount,
+    String? description,
+  }) async {
+    final body = <String, dynamic>{
+      'date': date.toIso8601String().split('T')[0],
+      'amount': amount,
+    };
+    if (description != null && description.isNotEmpty) body['description'] = description;
+
+    await _handleRequest(() async {
+      return await http.put(
+        Uri.parse('${ApiConstants.basePath}/cashbook/expense/$id'),
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode(body),
+      );
+    });
+  }
+
+  Future<void> deleteCashbookExpense(int id) async {
+    await _handleRequest(() async {
+      return await http.delete(
+        Uri.parse('${ApiConstants.basePath}/cashbook/expense/$id'),
+        headers: await _getHeaders(includeAuth: true),
       );
     });
   }

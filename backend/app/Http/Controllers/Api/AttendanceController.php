@@ -41,12 +41,15 @@ class AttendanceController extends Controller
 
         $attendanceData = [
             'status' => $validated['status'],
-            'in_time' => ($validated['status'] === 'present' || $validated['status'] === 'half_day') 
+            'in_time' => ($validated['status'] === 'present' || $validated['status'] === 'half_day')
                 ? ($validated['in_time'] ?? null) : null,
             'out_time' => $validated['out_time'] ?? null,
             'worked_hours' => $validated['worked_hours'] ?? 0,
             'pay_multiplier' => $validated['pay_multiplier'] ?? 1.0,
         ];
+        if ($validated['status'] !== 'present') {
+            $attendanceData['overtime_hours'] = 0;
+        }
 
         if ($attendance) {
             $attendance->update($attendanceData);
@@ -276,6 +279,94 @@ class AttendanceController extends Controller
                     'advance_amount' => (float) $attendance->advance_amount,
                 ],
             ],
+        ], 200);
+    }
+
+    /**
+     * Update advance amount for an attendance record (used when editing advance from cashbook)
+     */
+    public function updateAdvance(Request $request, int $attendanceId)
+    {
+        $attendance = Attendance::where('id', $attendanceId)
+            ->whereHas('staff', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->first();
+
+        if (!$attendance) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Attendance not found or you do not have permission to update advance.',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'amount' => 'required|numeric|min:0',
+        ]);
+
+        $attendance->update(['advance_amount' => $validated['amount']]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Advance updated successfully',
+            'data' => [
+                'attendance' => [
+                    'id' => $attendance->id,
+                    'staff_id' => $attendance->staff_id,
+                    'date' => $attendance->date->format('Y-m-d'),
+                    'advance_amount' => (float) $attendance->advance_amount,
+                ],
+            ],
+        ], 200);
+    }
+
+    /**
+     * Clear advance for an attendance record (used when "deleting" advance from cashbook)
+     */
+    public function clearAdvance(Request $request, int $attendanceId)
+    {
+        $attendance = Attendance::where('id', $attendanceId)
+            ->whereHas('staff', fn ($q) => $q->where('user_id', $request->user()->id))
+            ->first();
+
+        if (!$attendance) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Attendance not found or you do not have permission to clear advance.',
+            ], 404);
+        }
+
+        $attendance->update(['advance_amount' => 0]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Advance cleared successfully',
+        ], 200);
+    }
+
+    /**
+     * Clear (delete) attendance for a staff member on a date. Day becomes unmarked.
+     */
+    public function clearAttendance(Request $request)
+    {
+        $validated = $request->validate([
+            'staff_id' => 'required|integer|exists:staff,id',
+            'date' => 'required|date',
+        ]);
+
+        $staff = Staff::where('id', $validated['staff_id'])
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
+
+        $attendance = Attendance::where('staff_id', $validated['staff_id'])
+            ->where('date', $validated['date'])
+            ->first();
+
+        if ($attendance) {
+            $attendance->delete();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Attendance cleared successfully',
         ], 200);
     }
 }

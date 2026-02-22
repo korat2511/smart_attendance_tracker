@@ -136,6 +136,27 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         currentWorkedHours: attendance?.workedHours,
         currentPayMultiplier: attendance?.payMultiplier,
         salaryType: widget.staff.salaryType,
+        onRemove: (bool otOnly) async {
+          if (NavigationUtils.canPop()) NavigationUtils.pop();
+          try {
+            if (otOnly) {
+              await attendanceProvider.markOvertime(
+                staffId: widget.staff.id ?? 0,
+                date: date,
+                overtimeHours: 0,
+              );
+              if (mounted) SnackbarUtils.showSuccess('Overtime removed');
+            } else {
+              await attendanceProvider.clearAttendance(
+                staffId: widget.staff.id ?? 0,
+                date: date,
+              );
+              if (mounted) SnackbarUtils.showSuccess('Attendance cleared');
+            }
+          } catch (e) {
+            if (mounted) SnackbarUtils.showError(e.toString());
+          }
+        },
         onMark: (status, inTime, outTime, overtimeHours, workedHours, payMultiplier) async {
           // Close bottom sheet first
           if (NavigationUtils.canPop()) {
@@ -584,12 +605,9 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
                         ),
                       ),
                       
-                      // Attendance Column - Now shows status badge and opens bottom sheet on tap
+                      // Attendance Column - Badge has tap targets; P+OT has separate tap for OT chip
                       Expanded(
-                        child: GestureDetector(
-                          onTap: () => _showMarkAttendanceBottomSheet(day, attendanceProvider),
-                          child: _buildAttendanceStatusBadge(attendance, isDark),
-                        ),
+                        child: _buildAttendanceStatusBadge(attendance, isDark, day, attendanceProvider),
                       ),
                       
                 // Advance Column - tap amount to mark advance
@@ -680,12 +698,11 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     );
   }
 
-  Widget _buildAttendanceStatusBadge(AttendanceModel? attendance, bool isDark) {
+  Widget _buildAttendanceStatusBadge(AttendanceModel? attendance, bool isDark, int day, AttendanceProvider attendanceProvider) {
     final status = attendance?.status;
     final displayStatus = attendance?.displayStatus;
     final hasOvertime = attendance?.hasOvertime ?? false;
     final overtimeHours = attendance?.overtimeHours ?? 0.0;
-    
     Color statusColor;
     IconData statusIcon;
     
@@ -706,55 +723,61 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       statusIcon = Icons.add_circle_outline;
     }
     
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: status != null ? statusColor.withValues(alpha: 0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: statusColor,
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (status != null) ...[
-            Icon(statusIcon, size: 16, color: statusColor),
-            const SizedBox(width: 4),
-            Text(
-              displayStatus ?? status,
-              style: AppTypography.bodyMedium(
-                color: statusColor,
-                fontWeight: FontWeight.w600,
-              ),
+    Widget badgeContent = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (status != null) ...[
+          Icon(statusIcon, size: 16, color: statusColor),
+          const SizedBox(width: 4),
+          Text(
+            displayStatus ?? status,
+            style: AppTypography.bodyMedium(
+              color: statusColor,
+              fontWeight: FontWeight.w600,
             ),
-            if (hasOvertime && overtimeHours > 0) ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.orange,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '${overtimeHours.toStringAsFixed(1)}h',
-                  style: AppTypography.bodySmall(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
+          ),
+          if (hasOvertime && overtimeHours > 0) ...[
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${overtimeHours.toStringAsFixed(1)}h',
+                style: AppTypography.bodySmall(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ] else ...[
-            Icon(statusIcon, size: 16, color: statusColor),
-            const SizedBox(width: 4),
-            Text(
-              'Tap to mark',
-              style: AppTypography.bodySmall(color: statusColor),
             ),
           ],
+        ] else ...[
+          Icon(statusIcon, size: 16, color: statusColor),
+          const SizedBox(width: 4),
+          Text(
+            'Tap to mark',
+            style: AppTypography.bodySmall(color: statusColor),
+          ),
         ],
+      ],
+    );
+    
+    return GestureDetector(
+      onTap: () => _showMarkAttendanceBottomSheet(day, attendanceProvider),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: status != null ? statusColor.withValues(alpha: 0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: statusColor,
+            width: 1,
+          ),
+        ),
+        child: badgeContent,
       ),
     );
   }

@@ -100,6 +100,12 @@ class AttendanceProvider extends ChangeNotifier {
         displayStatus = status;
     }
     
+    final wasOvertime = (oldAttendance?.overtimeHours ?? 0) > 0;
+    final clearOvertime = status == 'absent' || status == 'off' || status == 'half_day';
+    final newOvertime = clearOvertime ? 0.0 : (oldAttendance?.overtimeHours ?? 0.0);
+    if (clearOvertime && wasOvertime) {
+      _overtimeCount = (_overtimeCount - 1).clamp(0, 999);
+    }
     // Optimistic update
     final newAttendance = AttendanceModel(
       id: oldAttendance?.id,
@@ -108,7 +114,7 @@ class AttendanceProvider extends ChangeNotifier {
       status: displayStatus,
       inTime: inTime,
       outTime: outTime,
-      overtimeHours: oldAttendance?.overtimeHours ?? 0.0,
+      overtimeHours: newOvertime,
       advanceAmount: oldAttendance?.advanceAmount ?? 0.0,
       workedHours: workedHours ?? oldAttendance?.workedHours ?? 0.0,
       payMultiplier: payMultiplier ?? oldAttendance?.payMultiplier ?? 1.0,
@@ -155,6 +161,51 @@ class AttendanceProvider extends ChangeNotifier {
     }
   }
 
+  /// Clear (delete) attendance for a day. Day shows as unmarked.
+  Future<void> clearAttendance({
+    required int staffId,
+    required DateTime date,
+  }) async {
+    final day = date.day;
+    final oldAttendance = _attendanceMap[day];
+    final oldPresentCount = _presentCount;
+    final oldAbsentCount = _absentCount;
+    final oldOvertimeCount = _overtimeCount;
+    final oldAdvanceTotal = _advanceTotal;
+    final oldAdvanceForDay = _advanceMap[day] ?? 0.0;
+
+    final oldStatus = oldAttendance?.status;
+
+    _attendanceMap.remove(day);
+    _advanceMap.remove(day);
+    if (oldStatus == 'P' || oldStatus == 'OT') {
+      _presentCount = (_presentCount - 1).clamp(0, 999);
+    } else if (oldStatus == 'A') {
+      _absentCount = (_absentCount - 1).clamp(0, 999);
+    }
+    if ((oldAttendance?.overtimeHours ?? 0) > 0) {
+      _overtimeCount = (_overtimeCount - 1).clamp(0, 999);
+    }
+    _advanceTotal = (_advanceTotal - oldAdvanceForDay).clamp(0.0, double.infinity);
+    notifyListeners();
+
+    try {
+      await ApiService().clearAttendance(staffId: staffId, date: date);
+    } catch (e) {
+      if (oldAttendance != null) {
+        _attendanceMap[day] = oldAttendance;
+        _advanceMap[day] = oldAdvanceForDay;
+      }
+      _presentCount = oldPresentCount;
+      _absentCount = oldAbsentCount;
+      _overtimeCount = oldOvertimeCount;
+      _advanceTotal = oldAdvanceTotal;
+      _errorMessage = e.toString();
+      notifyListeners();
+      rethrow;
+    }
+  }
+
   Future<void> markOvertime({
     required int staffId,
     required DateTime date,
@@ -180,6 +231,8 @@ class AttendanceProvider extends ChangeNotifier {
     _attendanceMap[day] = newAttendance;
     if ((oldAttendance?.overtimeHours ?? 0) == 0 && overtimeHours > 0) {
       _overtimeCount++;
+    } else if ((oldAttendance?.overtimeHours ?? 0) > 0 && overtimeHours == 0) {
+      _overtimeCount = (_overtimeCount - 1).clamp(0, 999);
     }
     notifyListeners();
     

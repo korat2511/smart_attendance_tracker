@@ -203,4 +203,140 @@ class CashbookController extends Controller
             ],
         ], 201);
     }
+
+    /**
+     * Delete an expense entry (manual cashbook expense only; advances cannot be deleted here)
+     */
+    public function deleteExpense(Request $request, int $id)
+    {
+        $expense = CashbookExpense::withoutGlobalScope('user')
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$expense) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Expense not found or you do not have permission to delete it.',
+            ], 404);
+        }
+
+        $expense->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Expense deleted successfully',
+        ], 200);
+    }
+
+    /**
+     * Delete an income entry
+     */
+    public function deleteIncome(Request $request, int $id)
+    {
+        $income = CashbookIncome::withoutGlobalScope('user')
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$income) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Income not found or you do not have permission to delete it.',
+            ], 404);
+        }
+
+        $income->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Income deleted successfully',
+        ], 200);
+    }
+
+    /**
+     * Update an income entry
+     */
+    public function updateIncome(Request $request, int $id)
+    {
+        $income = CashbookIncome::withoutGlobalScope('user')
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$income) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Income not found or you do not have permission to update it.',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'date' => 'required|date',
+            'amount' => 'required|numeric|min:0',
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        $income->update([
+            'date' => $validated['date'],
+            'amount' => $validated['amount'],
+            'description' => $validated['description'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Income updated successfully',
+            'data' => [
+                'income' => [
+                    'id' => $income->id,
+                    'date' => $income->date->format('Y-m-d'),
+                    'amount' => (float) $income->amount,
+                    'description' => $income->description,
+                ],
+            ],
+        ], 200);
+    }
+
+    /**
+     * Update an expense entry
+     */
+    public function updateExpense(Request $request, int $id)
+    {
+        $expense = CashbookExpense::withoutGlobalScope('user')
+            ->where('user_id', $request->user()->id)
+            ->where('id', $id)
+            ->first();
+
+        if (!$expense) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Expense not found or you do not have permission to update it.',
+            ], 404);
+        }
+
+        $validated = $request->validate([
+            'date' => 'required|date',
+            'amount' => 'required|numeric|min:0',
+            'description' => 'nullable|string|max:500',
+        ]);
+
+        $expense->update([
+            'date' => $validated['date'],
+            'amount' => $validated['amount'],
+            'description' => $validated['description'] ?? null,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Expense updated successfully',
+            'data' => [
+                'expense' => [
+                    'id' => $expense->id,
+                    'date' => $expense->date->format('Y-m-d'),
+                    'amount' => (float) $expense->amount,
+                    'description' => $expense->description,
+                ],
+            ],
+        ], 200);
+    }
 }

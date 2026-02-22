@@ -3,16 +3,23 @@ import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/navigation_utils.dart';
 
 class AddIncomeBottomSheet extends StatefulWidget {
   final DateTime initialDate;
+  final double? initialAmount;
+  final String? initialDescription;
   final Future<void> Function(DateTime date, double amount, String? description) onSave;
 
   const AddIncomeBottomSheet({
     super.key,
     required this.initialDate,
+    this.initialAmount,
+    this.initialDescription,
     required this.onSave,
   });
+
+  bool get isEditMode => initialAmount != null;
 
   @override
   State<AddIncomeBottomSheet> createState() => _AddIncomeBottomSheetState();
@@ -29,8 +36,12 @@ class _AddIncomeBottomSheetState extends State<AddIncomeBottomSheet> {
   void initState() {
     super.initState();
     _selectedDate = widget.initialDate;
-    _amountController = TextEditingController();
-    _descriptionController = TextEditingController();
+    _amountController = TextEditingController(
+      text: widget.initialAmount != null ? widget.initialAmount.toString() : '',
+    );
+    _descriptionController = TextEditingController(
+      text: widget.initialDescription ?? '',
+    );
   }
 
   @override
@@ -68,8 +79,8 @@ class _AddIncomeBottomSheetState extends State<AddIncomeBottomSheet> {
             : _descriptionController.text.trim(),
       );
       if (mounted) {
-        SnackbarUtils.showSuccess('Income added successfully');
-        Navigator.of(context).pop();
+        SnackbarUtils.showSuccess(widget.isEditMode ? 'Income updated successfully' : 'Income added successfully');
+        NavigationUtils.pop();
       }
     } catch (e) {
       if (mounted) SnackbarUtils.showError(e.toString());
@@ -108,7 +119,7 @@ class _AddIncomeBottomSheetState extends State<AddIncomeBottomSheet> {
             ),
             const SizedBox(height: 20),
             Text(
-              'Add Income',
+              widget.isEditMode ? 'Edit Income' : 'Add Income',
               style: AppTypography.titleLarge(
                 color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                 fontWeight: FontWeight.bold,
@@ -183,7 +194,7 @@ class _AddIncomeBottomSheetState extends State<AddIncomeBottomSheet> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                        onPressed: _isLoading ? null : () => NavigationUtils.pop(),
                         child: Text(
                           'Cancel',
                           style: AppTypography.labelLarge(

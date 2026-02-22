@@ -76,16 +76,18 @@ class PayCalculationInfoScreen extends StatelessWidget {
               title: 'Monthly Rate',
               icon: Icons.calendar_month,
               color: Colors.purple,
-              formula: 'Total Pay = (Working Days ÷ Days in Month) × Monthly Rate + OT',
-              description: 'Payment is prorated based on attendance:',
+              formula: 'Total Pay = (Working Days ÷ Working Days in Month) × Monthly Rate + OT',
+              description: 'Payment is prorated based on attendance. Off days (holidays/week off) are not counted:',
               bulletPoints: [
-                'Full attendance = 100% of monthly salary',
-                'Partial attendance is prorated',
+                'Working days in month = Days in month − Off days marked',
+                'Full attendance on working days = 100% of monthly salary',
                 'Half days count as 0.5 days',
                 'Check-in/out times are optional',
               ],
-              example: 'Example: 22 days ÷ 31 days × ₹15,000 = ₹10,645 (for January)',
+              example: 'Example: January has 31 days, 2 off days → 29 working days. 22 present ÷ 29 × ₹15,000 = ₹11,379',
             ),
+            const SizedBox(height: 24),
+            _buildOffDaysSection(isDark),
             const SizedBox(height: 24),
             _buildPayMultiplierSection(isDark),
             const SizedBox(height: 24),
@@ -270,6 +272,71 @@ class PayCalculationInfoScreen extends StatelessWidget {
                       color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                       fontWeight: FontWeight.w500,
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOffDaysSection(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.teal.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.teal.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.event_busy, color: Colors.teal, size: 24),
+              const SizedBox(width: 12),
+              Text(
+                'Off Days (Holidays / Week Off)',
+                style: AppTypography.titleMedium(
+                  color: Colors.teal[800],
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'For monthly staff, any day marked as "Off" (holiday, week off) is not counted in the working days. '
+            'Pay is prorated using working days = days in month − off days.',
+            style: AppTypography.bodyMedium(
+              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.backgroundDark : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Working days in month = Days in month − Off days',
+                  style: AppTypography.bodyMedium(
+                    color: Colors.teal[800],
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Example: January has 31 days. If you mark 2 days as Off (e.g. Republic Day, Sunday off), '
+                  'working days = 29. Pay is then (Present + Half×0.5) ÷ 29 × Monthly rate.',
+                  style: AppTypography.bodySmall(
+                    color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
                   ),
                 ),
               ],

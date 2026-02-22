@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/navigation_utils.dart';
 
 class AdvancePaymentBottomSheet extends StatefulWidget {
   final DateTime date;
@@ -64,7 +65,7 @@ class _AdvancePaymentBottomSheetState extends State<AdvancePaymentBottomSheet> {
     try {
       await widget.onSave(amount, _notesController.text.trim().isEmpty ? null : _notesController.text.trim());
       if (mounted) {
-        Navigator.of(context).pop(true);
+        NavigationUtils.pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -170,7 +171,7 @@ class _AdvancePaymentBottomSheetState extends State<AdvancePaymentBottomSheet> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: _isLoading ? null : () => Navigator.of(context).pop(false),
+                        onPressed: _isLoading ? null : () => NavigationUtils.pop(false),
                         child: Text(
                           'Cancel',
                           style: AppTypography.labelLarge(

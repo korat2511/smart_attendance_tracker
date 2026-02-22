@@ -4,10 +4,13 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/utils/focus_utils.dart';
 import '../../../core/utils/responsive_utils.dart';
+import '../../../core/utils/navigation_utils.dart';
+import '../../../core/utils/snackbar_utils.dart';
 import '../../../core/models/cashbook_model.dart';
 import '../providers/cashbook_provider.dart';
 import 'add_income_bottom_sheet.dart';
 import 'add_expense_bottom_sheet.dart';
+import '../../staff/screens/advance_payment_bottom_sheet.dart';
 
 class CashbookScreen extends StatefulWidget {
   const CashbookScreen({super.key});
@@ -77,6 +80,26 @@ class _CashbookScreenState extends State<CashbookScreen> {
     );
   }
 
+  void _showEditSheet(Widget sheet) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => sheet,
+    );
+  }
+
+  /// Format amount in INR with comma separation (e.g. ₹50,000.00)
+  String _formatInr(double n, {int decimals = 2}) {
+    final s = n.toStringAsFixed(decimals);
+    final parts = s.split('.');
+    final intPart = parts[0].replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]},',
+    );
+    return '₹$intPart${decimals > 0 ? '.${parts[1]}' : ''}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -110,7 +133,7 @@ class _CashbookScreenState extends State<CashbookScreen> {
                           icon: Icons.trending_up,
                           iconColor: AppColors.successGreen,
                           count: overview != null
-                              ? '₹${overview.incomeTotal.toStringAsFixed(0)}'
+                              ? _formatInr(overview.incomeTotal, decimals: 0)
                               : '₹0',
                           label: 'Income',
                         ),
@@ -124,7 +147,7 @@ class _CashbookScreenState extends State<CashbookScreen> {
                           icon: Icons.trending_down,
                           iconColor: AppColors.warningRed,
                           count: overview != null
-                              ? '₹${overview.expenseTotal.toStringAsFixed(0)}'
+                              ? _formatInr(overview.expenseTotal, decimals: 0)
                               : '₹0',
                           label: 'Expense',
                         ),
@@ -138,7 +161,7 @@ class _CashbookScreenState extends State<CashbookScreen> {
                           icon: Icons.account_balance_wallet,
                           iconColor: AppColors.primaryBlue,
                           count: overview != null
-                              ? '₹${overview.balance.toStringAsFixed(0)}'
+                              ? _formatInr(overview.balance, decimals: 0)
                               : '₹0',
                           label: 'Balance',
                         ),
@@ -344,7 +367,7 @@ class _CashbookScreenState extends State<CashbookScreen> {
                   ),
                 ),
                 SizedBox(
-                  width: 80,
+                  width: 88,
                   child: Text(
                     'Amount',
                     style: AppTypography.labelLarge(
@@ -356,6 +379,7 @@ class _CashbookScreenState extends State<CashbookScreen> {
                     textAlign: TextAlign.right,
                   ),
                 ),
+                const SizedBox(width: 40),
               ],
             ),
           ),
@@ -380,7 +404,7 @@ class _CashbookScreenState extends State<CashbookScreen> {
                     itemCount: transactions.length,
                     itemBuilder: (context, index) {
                       final t = transactions[index];
-                      return _buildTransactionRow(context, isDark, t);
+                      return _buildTransactionRow(context, isDark, t, provider);
                     },
                   ),
           ),
@@ -393,13 +417,16 @@ class _CashbookScreenState extends State<CashbookScreen> {
     BuildContext context,
     bool isDark,
     CashbookTransactionModel t,
+    CashbookProvider provider,
   ) {
     final day = t.date.day;
     final monthShort = _monthShort(t.date.month);
     final amountColor =
         t.isIncome ? AppColors.successGreen : AppColors.warningRed;
-    final amountPrefix = t.isIncome ? '+₹' : '-₹';
     final typeLabel = t.isIncome ? 'Income' : 'Expense';
+    final isIncome = t.id.startsWith('income_');
+    final isExpense = t.id.startsWith('expense_');
+    final isAdvance = t.id.startsWith('advance_');
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -442,7 +469,7 @@ class _CashbookScreenState extends State<CashbookScreen> {
                         ? AppColors.textPrimaryDark
                         : AppColors.textPrimaryLight,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
@@ -454,19 +481,171 @@ class _CashbookScreenState extends State<CashbookScreen> {
             ),
           ),
           SizedBox(
-            width: 80,
+            width: 88,
             child: Text(
-              '$amountPrefix${t.amount.toStringAsFixed(2)}',
+              '${t.isIncome ? '+' : '-'}${_formatInr(t.amount)}',
               style: AppTypography.bodyMedium(
                 color: amountColor,
+
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          PopupMenuButton<String>(
+              icon: Icon(
+                Icons.more_vert,
+                size: 22,
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              onSelected: (value) {
+                switch (value) {
+                  case 'edit':
+                    if (isIncome) {
+                      _showEditSheet(
+                        AddIncomeBottomSheet(
+                          initialDate: t.date,
+                          initialAmount: t.amount,
+                          initialDescription: t.description,
+                          onSave: (date, amount, description) async {
+                            await provider.updateIncome(
+                              transactionId: t.id,
+                              date: date,
+                              amount: amount,
+                              description: description,
+                            );
+                          },
+                        ),
+                      );
+                    } else if (isExpense) {
+                      _showEditSheet(
+                        AddExpenseBottomSheet(
+                          initialDate: t.date,
+                          initialAmount: t.amount,
+                          initialDescription: t.description,
+                          onSave: (date, amount, description) async {
+                            await provider.updateExpense(
+                              transactionId: t.id,
+                              date: date,
+                              amount: amount,
+                              description: description,
+                            );
+                          },
+                        ),
+                      );
+                    } else {
+                      _showEditSheet(
+                        AdvancePaymentBottomSheet(
+                          date: t.date,
+                          initialAmount: t.amount,
+                          initialNotes: null,
+                          onSave: (amount, notes) async {
+                            await provider.updateAdvance(t.id, amount);
+                            if (mounted) SnackbarUtils.showSuccess('Advance updated');
+                          },
+                        ),
+                      );
+                    }
+                    break;
+                  case 'delete':
+                    if (isIncome) {
+                      _confirmDeleteTransaction(
+                        context: context,
+                        title: 'Delete Income',
+                        content: 'Delete this income of ${_formatInr(t.amount)}?\n\n${t.description}',
+                        confirmButtonText: 'Delete',
+                        successMessage: 'Income deleted',
+                        onConfirm: () => provider.deleteIncome(t.id),
+                      );
+                    } else if (isAdvance) {
+                      _confirmDeleteTransaction(
+                        context: context,
+                        title: 'Remove Advance',
+                        content: 'Remove this advance of ${_formatInr(t.amount)}?\n\n${t.description}\n\nAdvance will be cleared from the attendance record.',
+                        confirmButtonText: 'Remove',
+                        successMessage: 'Advance removed',
+                        onConfirm: () => provider.deleteAdvance(t.id),
+                      );
+                    } else {
+                      _confirmDeleteTransaction(
+                        context: context,
+                        title: 'Delete Expense',
+                        content: 'Delete this expense of ${_formatInr(t.amount)}?\n\n${t.description}',
+                        confirmButtonText: 'Delete',
+                        successMessage: 'Expense deleted',
+                        onConfirm: () => provider.deleteExpense(t.id),
+                      );
+                    }
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit_outlined, size: 20, color: AppColors.primaryBlue),
+                      SizedBox(width: 12),
+                      Text('Edit'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delete_outline, size: 20, color: AppColors.warningRed),
+                      const SizedBox(width: 12),
+                      Text(isAdvance ? 'Remove advance' : 'Delete'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteTransaction({
+    required BuildContext context,
+    required String title,
+    required String content,
+    required String confirmButtonText,
+    required String successMessage,
+    required Future<void> Function() onConfirm,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(content),
+        actions: [
+          TextButton(
+            onPressed: () => NavigationUtils.pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => NavigationUtils.pop(true),
+            child: Text(
+              confirmButtonText,
+              style: TextStyle(color: AppColors.warningRed, fontWeight: FontWeight.w600),
             ),
           ),
         ],
       ),
     );
+    if (confirmed != true) return;
+    try {
+      await onConfirm();
+      if (context.mounted) SnackbarUtils.showSuccess(successMessage);
+    } catch (e) {
+      if (context.mounted) SnackbarUtils.showError(e.toString());
+    }
   }
 
   String _monthShort(int month) {

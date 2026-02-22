@@ -80,4 +80,76 @@ class CashbookProvider extends ChangeNotifier {
     );
     await loadData();
   }
+
+  /// Delete income. Transaction id must be of form "income_123".
+  Future<void> deleteIncome(String transactionId) async {
+    if (!transactionId.startsWith('income_')) return;
+    final id = int.tryParse(transactionId.replaceFirst('income_', ''));
+    if (id == null) return;
+    await ApiService().deleteCashbookIncome(id);
+    await loadData();
+  }
+
+  Future<void> updateIncome({
+    required String transactionId,
+    required DateTime date,
+    required double amount,
+    String? description,
+  }) async {
+    if (!transactionId.startsWith('income_')) return;
+    final id = int.tryParse(transactionId.replaceFirst('income_', ''));
+    if (id == null) return;
+    await ApiService().updateCashbookIncome(
+      id: id,
+      date: date,
+      amount: amount,
+      description: description,
+    );
+    await loadData();
+  }
+
+  Future<void> updateExpense({
+    required String transactionId,
+    required DateTime date,
+    required double amount,
+    String? description,
+  }) async {
+    if (!transactionId.startsWith('expense_')) return;
+    final id = int.tryParse(transactionId.replaceFirst('expense_', ''));
+    if (id == null) return;
+    await ApiService().updateCashbookExpense(
+      id: id,
+      date: date,
+      amount: amount,
+      description: description,
+    );
+    await loadData();
+  }
+
+  /// Delete a manual cashbook expense. Transaction id must be of form "expense_123".
+  Future<void> deleteExpense(String transactionId) async {
+    if (!transactionId.startsWith('expense_')) return;
+    final id = int.tryParse(transactionId.replaceFirst('expense_', ''));
+    if (id == null) return;
+    await ApiService().deleteCashbookExpense(id);
+    await loadData();
+  }
+
+  /// Clear advance for an attendance. Transaction id must be of form "advance_123".
+  Future<void> deleteAdvance(String transactionId) async {
+    if (!transactionId.startsWith('advance_')) return;
+    final id = int.tryParse(transactionId.replaceFirst('advance_', ''));
+    if (id == null) return;
+    await ApiService().clearAdvance(id);
+    await loadData();
+  }
+
+  /// Update advance amount. Transaction id must be of form "advance_123".
+  Future<void> updateAdvance(String transactionId, double amount) async {
+    if (!transactionId.startsWith('advance_')) return;
+    final id = int.tryParse(transactionId.replaceFirst('advance_', ''));
+    if (id == null) return;
+    await ApiService().updateAdvance(id, amount);
+    await loadData();
+  }
 }

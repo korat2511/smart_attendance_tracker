@@ -3,16 +3,23 @@ import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/navigation_utils.dart';
 
 class AddExpenseBottomSheet extends StatefulWidget {
   final DateTime initialDate;
+  final double? initialAmount;
+  final String? initialDescription;
   final Future<void> Function(DateTime date, double amount, String? description) onSave;
 
   const AddExpenseBottomSheet({
     super.key,
     required this.initialDate,
+    this.initialAmount,
+    this.initialDescription,
     required this.onSave,
   });
+
+  bool get isEditMode => initialAmount != null;
 
   @override
   State<AddExpenseBottomSheet> createState() => _AddExpenseBottomSheetState();
@@ -29,8 +36,12 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
   void initState() {
     super.initState();
     _selectedDate = widget.initialDate;
-    _amountController = TextEditingController();
-    _descriptionController = TextEditingController();
+    _amountController = TextEditingController(
+      text: widget.initialAmount != null ? widget.initialAmount.toString() : '',
+    );
+    _descriptionController = TextEditingController(
+      text: widget.initialDescription ?? '',
+    );
   }
 
   @override
@@ -68,8 +79,8 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
             : _descriptionController.text.trim(),
       );
       if (mounted) {
-        SnackbarUtils.showSuccess('Expense added successfully');
-        Navigator.of(context).pop();
+        SnackbarUtils.showSuccess(widget.isEditMode ? 'Expense updated successfully' : 'Expense added successfully');
+        NavigationUtils.pop();
       }
     } catch (e) {
       if (mounted) SnackbarUtils.showError(e.toString());
@@ -108,7 +119,7 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
             ),
             const SizedBox(height: 20),
             Text(
-              'Add Expense',
+              widget.isEditMode ? 'Edit Expense' : 'Add Expense',
               style: AppTypography.titleLarge(
                 color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
                 fontWeight: FontWeight.bold,
@@ -183,7 +194,7 @@ class _AddExpenseBottomSheetState extends State<AddExpenseBottomSheet> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       TextButton(
-                        onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                        onPressed: _isLoading ? null : () => NavigationUtils.pop(),
                         child: Text(
                           'Cancel',
                           style: AppTypography.labelLarge(

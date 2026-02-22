@@ -16,6 +16,8 @@ class MarkAttendanceBottomSheet extends StatefulWidget {
   final double? currentPayMultiplier;
   final String salaryType; // 'hourly', 'daily', 'weekly', 'monthly'
   final Function(String status, String? inTime, String? outTime, double? overtimeHours, double? workedHours, double? payMultiplier) onMark;
+  /// Called when user taps Remove. [otOnly] true = remove only OT, false = remove full attendance.
+  final void Function(bool otOnly)? onRemove;
 
   const MarkAttendanceBottomSheet({
     super.key,
@@ -28,6 +30,7 @@ class MarkAttendanceBottomSheet extends StatefulWidget {
     this.currentPayMultiplier,
     required this.salaryType,
     required this.onMark,
+    this.onRemove,
   });
   
   bool get isHourly => salaryType.toLowerCase() == 'hourly';
@@ -42,10 +45,16 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
   String? _outTime;
   bool _isLoading = false;
   bool _useManualHours = false;
+  /// When user taps the chip that matches current attendance, we show Remove instead of Mark.
+  bool _removeRequested = false;
+  /// 'all' = remove full day, 'ot_only' = remove only overtime.
+  String? _removeIntent;
   
   late TextEditingController _workedHoursController;
   late TextEditingController _overtimeHoursController;
   late TextEditingController _payMultiplierController;
+
+  bool get _currentHasOvertime => (widget.currentOvertimeHours ?? 0) > 0;
 
   @override
   void initState() {
@@ -86,13 +95,28 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
   }
 
   bool _isPresentSelected() {
-    final status = _selectedStatus ?? widget.currentStatus;
+    final status = _removeRequested ? _selectedStatus : (_selectedStatus ?? widget.currentStatus);
     return status == 'P' || status == 'OT';
   }
 
   bool _isOvertimeSelected() {
-    final status = _selectedStatus ?? widget.currentStatus;
+    final status = _removeRequested ? _selectedStatus : (_selectedStatus ?? widget.currentStatus);
     return status == 'OT';
+  }
+
+  bool _isHdSelected() {
+    final status = _removeRequested ? _selectedStatus : (_selectedStatus ?? widget.currentStatus);
+    return status == 'HD';
+  }
+
+  bool _isAbsentSelected() {
+    final status = _removeRequested ? _selectedStatus : (_selectedStatus ?? widget.currentStatus);
+    return status == 'A';
+  }
+
+  bool _isOffSelected() {
+    final status = _removeRequested ? _selectedStatus : (_selectedStatus ?? widget.currentStatus);
+    return status == 'Off';
   }
 
   String _getDateString() {
@@ -120,6 +144,9 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
   }
 
   String _getButtonText() {
+    if (_removeRequested && _removeIntent != null) {
+      return _removeIntent == 'ot_only' ? 'Remove OT' : 'Remove';
+    }
     final status = _selectedStatus ?? widget.currentStatus;
     if (status == 'P') {
       return 'Mark Present';
@@ -133,6 +160,56 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
       return 'Mark Off';
     }
     return 'Mark';
+  }
+
+  void _handleRemove() {
+    if (widget.onRemove == null) return;
+    widget.onRemove!(_removeIntent == 'ot_only');
+  }
+
+  void _onStatusChipTapped(String value) {
+    final current = widget.currentStatus;
+    setState(() {
+      if (value == 'P' && (current == 'P' || current == 'OT')) {
+        _removeRequested = true;
+        _removeIntent = 'all';
+        _selectedStatus = null;
+      } else if (value == 'HD' && current == 'HD') {
+        _removeRequested = true;
+        _removeIntent = 'all';
+        _selectedStatus = null;
+      } else if (value == 'A' && current == 'A') {
+        _removeRequested = true;
+        _removeIntent = 'all';
+        _selectedStatus = null;
+      } else if (value == 'Off' && current == 'Off') {
+        _removeRequested = true;
+        _removeIntent = 'all';
+        _selectedStatus = null;
+      } else if (value == 'OT' && (current == 'OT' || (current == 'P' && _currentHasOvertime))) {
+        _removeRequested = true;
+        _removeIntent = 'ot_only';
+        _selectedStatus = null;
+      } else {
+        _removeRequested = false;
+        _removeIntent = null;
+        _selectedStatus = value;
+        if (value == 'P' || value == 'OT') {
+          if (_inTime == null && widget.currentInTime != null) _inTime = widget.currentInTime;
+          if (_outTime == null && widget.currentOutTime != null) _outTime = widget.currentOutTime;
+        }
+        if (value == 'OT') {
+          // keep times
+        } else {
+          _overtimeHoursController.clear();
+        }
+        if (value == 'A' || value == 'Off') {
+          _inTime = null;
+          _outTime = null;
+          _workedHoursController.clear();
+        }
+      }
+    });
   }
 
   Future<void> _selectTime(String type) async {
@@ -313,16 +390,7 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'Present',
                     AppColors.successGreen,
                     _isPresentSelected(),
-                    () => setState(() {
-                      _selectedStatus = 'P';
-                      _overtimeHoursController.clear();
-                      if (_inTime == null && widget.currentInTime != null) {
-                        _inTime = widget.currentInTime;
-                      }
-                      if (_outTime == null && widget.currentOutTime != null) {
-                        _outTime = widget.currentOutTime;
-                      }
-                    }),
+                    () => _onStatusChipTapped('P'),
                     isDark,
                   ),
                 ),
@@ -332,17 +400,8 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'HD',
                     'Half Day',
                     Colors.blue,
-                    _selectedStatus == 'HD' || (widget.currentStatus == 'HD' && _selectedStatus == null),
-                    () => setState(() {
-                      _selectedStatus = 'HD';
-                      _overtimeHoursController.clear();
-                      if (_inTime == null && widget.currentInTime != null) {
-                        _inTime = widget.currentInTime;
-                      }
-                      if (_outTime == null && widget.currentOutTime != null) {
-                        _outTime = widget.currentOutTime;
-                      }
-                    }),
+                    _isHdSelected(),
+                    () => _onStatusChipTapped('HD'),
                     isDark,
                   ),
                 ),
@@ -352,14 +411,8 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'A',
                     'Absent',
                     AppColors.warningRed,
-                    _selectedStatus == 'A' || (widget.currentStatus == 'A' && _selectedStatus == null),
-                    () => setState(() {
-                      _selectedStatus = 'A';
-                      _inTime = null;
-                      _outTime = null;
-                      _overtimeHoursController.clear();
-                      _workedHoursController.clear();
-                    }),
+                    _isAbsentSelected(),
+                    () => _onStatusChipTapped('A'),
                     isDark,
                   ),
                 ),
@@ -369,14 +422,8 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'Off',
                     'Off',
                     Colors.purple,
-                    _selectedStatus == 'Off' || (widget.currentStatus == 'Off' && _selectedStatus == null),
-                    () => setState(() {
-                      _selectedStatus = 'Off';
-                      _inTime = null;
-                      _outTime = null;
-                      _overtimeHoursController.clear();
-                      _workedHoursController.clear();
-                    }),
+                    _isOffSelected(),
+                    () => _onStatusChipTapped('Off'),
                     isDark,
                   ),
                 ),
@@ -387,17 +434,7 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                     'Overtime',
                     Colors.orange,
                     _isOvertimeSelected(),
-                    () {
-                      setState(() {
-                        _selectedStatus = 'OT';
-                        if (_inTime == null && widget.currentInTime != null) {
-                          _inTime = widget.currentInTime;
-                        }
-                        if (_outTime == null && widget.currentOutTime != null) {
-                          _outTime = widget.currentOutTime;
-                        }
-                      });
-                    },
+                    () => _onStatusChipTapped('OT'),
                     isDark,
                   ),
                 ),
@@ -405,9 +442,10 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
             ),
           ),
 
-          // Check In / Check Out OR Manual Hours (only for Present, Half Day, or OT)
-          if ((_selectedStatus == 'P' || _selectedStatus == 'HD' || _selectedStatus == 'OT') ||
-              (_selectedStatus == null && (widget.currentStatus == 'P' || widget.currentStatus == 'HD' || widget.currentStatus == 'OT')))
+          // Check In / Check Out OR Manual Hours (only for Present, Half Day, or OT; hide when Remove is shown)
+          if (!_removeRequested &&
+              ((_selectedStatus == 'P' || _selectedStatus == 'HD' || _selectedStatus == 'OT') ||
+                  (_selectedStatus == null && (widget.currentStatus == 'P' || widget.currentStatus == 'HD' || widget.currentStatus == 'OT'))))
             Padding(
               padding: EdgeInsets.all(ResponsiveUtils.horizontalPadding(context)),
               child: Column(
@@ -567,6 +605,21 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
               ),
             ),
 
+          // Remove mode note (only after user taps the matching chip)
+          if (_removeRequested && _removeIntent != null) ...[
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: ResponsiveUtils.horizontalPadding(context)),
+              child: Text(
+                _removeIntent == 'ot_only'
+                    ? 'Only overtime will be cleared for this day.'
+                    : 'Attendance will be cleared for this day.',
+                style: AppTypography.bodySmall(
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           // Buttons
           Padding(
             padding: EdgeInsets.all(ResponsiveUtils.horizontalPadding(context)),
@@ -597,9 +650,12 @@ class _MarkAttendanceBottomSheetState extends State<MarkAttendanceBottomSheet> {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleMark,
+                    onPressed: _isLoading ? null : (_removeRequested ? _handleRemove : _handleMark),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: () {
+                        if (_removeRequested && _removeIntent != null) {
+                          return _removeIntent == 'ot_only' ? Colors.orange : AppColors.warningRed;
+                        }
                         final status = _selectedStatus ?? widget.currentStatus;
                         if (status == 'A') return AppColors.warningRed;
                         if (status == 'Off') return Colors.purple;

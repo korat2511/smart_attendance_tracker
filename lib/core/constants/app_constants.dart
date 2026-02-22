@@ -3,8 +3,8 @@ abstract class AppConstants {
   AppConstants._();
 
   static const String appName = 'Attendex';
-  static const String appVersion = '1.0.2';
-  static const String buildNumber = '3';
+  static const String appVersion = '1.0.3';
+  static const String buildNumber = '4';
   static String get fullVersion => '$appVersion ($buildNumber)';
 
   /// Minimum supported Android SDK (if needed for checks)

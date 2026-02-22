@@ -59,7 +59,10 @@ Route::prefix('v1')->group(function () {
         Route::prefix('attendance')->group(function () {
             Route::post('/mark', [AttendanceController::class, 'markAttendance']);
             Route::post('/mark-ot', [AttendanceController::class, 'markOT']);
+            Route::post('/clear', [AttendanceController::class, 'clearAttendance']);
             Route::post('/advance', [AttendanceController::class, 'markAdvance']);
+            Route::put('/advance/{id}', [AttendanceController::class, 'updateAdvance']);
+            Route::delete('/advance/{id}', [AttendanceController::class, 'clearAdvance']);
             Route::get('/staff/{staffId}', [AttendanceController::class, 'getAttendance']);
         });
         
@@ -73,7 +76,11 @@ Route::prefix('v1')->group(function () {
             Route::get('/overview', [CashbookController::class, 'getOverview']);
             Route::get('/transactions', [CashbookController::class, 'getTransactions']);
             Route::post('/income', [CashbookController::class, 'addIncome']);
+            Route::put('/income/{id}', [CashbookController::class, 'updateIncome']);
+            Route::delete('/income/{id}', [CashbookController::class, 'deleteIncome']);
             Route::post('/expense', [CashbookController::class, 'addExpense']);
+            Route::put('/expense/{id}', [CashbookController::class, 'updateExpense']);
+            Route::delete('/expense/{id}', [CashbookController::class, 'deleteExpense']);
         });
 
         // Subscription routes
