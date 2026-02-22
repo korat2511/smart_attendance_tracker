@@ -788,7 +788,8 @@ class ApiService {
     });
 
     final json = _handleResponse<Map<String, dynamic>>(response, (json) => json);
-    return SubscriptionStatusModel.fromJson(json);
+    final data = json['data'] is Map<String, dynamic> ? json['data'] as Map<String, dynamic> : json;
+    return SubscriptionStatusModel.fromJson(data);
   }
 
   Future<SubscriptionCreateResponse> createSubscription() async {

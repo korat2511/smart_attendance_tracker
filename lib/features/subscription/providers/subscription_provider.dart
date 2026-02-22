@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/foundation.dart';
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
@@ -71,8 +73,8 @@ class SubscriptionProvider extends ChangeNotifier {
         'subscription_id': response.subscriptionId,
         'name': 'AttendEx',
         'description': response.hasTrial
-            ? '7-Day Free Trial + ₹199/month'
-            : '₹199/month Subscription',
+            ? '7-Day Trial (₹2) + ₹99/month'
+            : '₹99/month Subscription',
         'prefill': {
           'name': userName,
           'email': userEmail,
@@ -119,8 +121,15 @@ class SubscriptionProvider extends ChangeNotifier {
     try {
       await _apiService.cancelSubscription();
       await checkSubscriptionStatus();
+      if (_error != null) {
+        final err = _error;
+        _error = null;
+        throw Exception(err);
+      }
     } catch (e) {
+      log("E == ${e.toString()}");
       _error = e.toString();
+      rethrow;
     } finally {
       _isLoading = false;
       notifyListeners();

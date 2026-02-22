@@ -31,27 +31,46 @@ class SubscriptionController extends Controller
             ->orderBy('created_at', 'desc')
             ->first();
 
+        $canUseTrial = $this->canUserUseTrial($user->id, $user->mobile);
+
         if (!$subscription) {
             return response()->json([
                 'has_active_plan' => false,
                 'has_free_trial' => false,
                 'trial_ends_at' => null,
                 'subscription_status' => null,
-                'can_use_trial' => !SubscriptionTrial::hasUsedTrial($user->mobile),
+                'current_period_end' => null,
+                'cancel_at_period_end' => false,
+                'can_use_trial' => $canUseTrial,
             ]);
         }
 
         $isTrialing = $subscription->isTrialing();
         $isActive = $subscription->isActive();
+        $isHalted = $subscription->status === 'halted';
+        $hasAccessUntilPeriodEnd = in_array($subscription->status, ['active', 'authenticated', 'halted'])
+            && $subscription->current_period_end
+            && $subscription->current_period_end->endOfDay() >= now();
+        $hasActivePlan = ($isActive || $isHalted) && !$isTrialing && $hasAccessUntilPeriodEnd;
 
         return response()->json([
-            'has_active_plan' => $isActive && !$isTrialing,
+            'has_active_plan' => $hasActivePlan,
             'has_free_trial' => $isTrialing,
             'trial_ends_at' => $subscription->trial_ends_at?->toIso8601String(),
             'subscription_status' => $subscription->status,
             'current_period_end' => $subscription->current_period_end?->toIso8601String(),
-            'can_use_trial' => !SubscriptionTrial::hasUsedTrial($user->mobile),
+            'cancel_at_period_end' => (bool) $subscription->cancel_at_period_end,
+            'can_use_trial' => $canUseTrial,
         ]);
+    }
+
+    /** One-time trial per mobile: false if they already used trial or ever had a subscription with trial. */
+    private function canUserUseTrial(int $userId, string $mobile): bool
+    {
+        if (SubscriptionTrial::where('mobile', $mobile)->exists()) {
+            return false;
+        }
+        return !Subscription::where('user_id', $userId)->whereNotNull('trial_ends_at')->exists();
     }
 
     public function create(Request $request)
@@ -69,7 +88,7 @@ class SubscriptionController extends Controller
             ], 400);
         }
 
-        $canUseTrial = !SubscriptionTrial::hasUsedTrial($mobile);
+        $canUseTrial = $this->canUserUseTrial($user->id, $mobile);
 
         try {
             $customerId = $this->getOrCreateCustomer($user);
@@ -92,8 +111,8 @@ class SubscriptionController extends Controller
                 $subscriptionData['addons'] = [
                     [
                         'item' => [
-                            'name' => 'Setup Fee',
-                            'amount' => 1000,
+                            'name' => '7-Day Trial',
+                            'amount' => 200,
                             'currency' => 'INR',
                         ],
                     ],
@@ -122,10 +141,18 @@ class SubscriptionController extends Controller
                 'razorpay_customer_id' => $customerId,
                 'status' => $razorpaySubscription['status'],
                 'trial_ends_at' => $canUseTrial ? now()->addDays(7) : null,
-                'amount' => 199.00,
+                'amount' => 99.00,
                 'currency' => 'INR',
                 'metadata' => $razorpaySubscription,
             ]);
+
+            // Mark trial as used for this mobile so "Activate again" shows full plan only (one-time trial per number).
+            if ($canUseTrial) {
+                SubscriptionTrial::firstOrCreate(
+                    ['mobile' => $mobile],
+                    ['user_id' => $user->id, 'trial_used_at' => now()]
+                );
+            }
 
             return response()->json([
                 'subscription_id' => $razorpaySubscription['id'],
@@ -195,7 +222,7 @@ class SubscriptionController extends Controller
         $user = $request->user();
 
         $subscription = Subscription::where('user_id', $user->id)
-            ->whereIn('status', ['active', 'authenticated', 'pending'])
+            ->whereIn('status', ['active', 'authenticated', 'pending', 'created'])
             ->orderBy('created_at', 'desc')
             ->first();
 
@@ -205,42 +232,39 @@ class SubscriptionController extends Controller
             ], 404);
         }
 
+        // Always record user's cancel intent in our DB first (so table updates even for trial).
+        $subscription->update([
+            'cancel_at_period_end' => true,
+            'metadata' => array_merge($subscription->metadata ?? [], [
+                'cancelled_at' => now()->toIso8601String(),
+            ]),
+        ]);
+
+        // Trial: cancel immediately in Razorpay so no "Next Due" and no charge. Paid: cancel at cycle end so access until period end.
+        $cancelAtCycleEnd = !$subscription->isTrialing();
         try {
             $response = Http::withBasicAuth($this->keyId, $this->keySecret)
                 ->post("{$this->baseUrl}/subscriptions/{$subscription->razorpay_subscription_id}/cancel", [
-                    'cancel_at_cycle_end' => 1,
+                    'cancel_at_cycle_end' => $cancelAtCycleEnd ? 1 : 0,
                 ]);
 
             if (!$response->successful()) {
-                Log::error('Razorpay subscription cancellation failed', [
+                Log::warning('Razorpay cancel failed (our DB already updated)', [
                     'response' => $response->json(),
                     'subscription_id' => $subscription->razorpay_subscription_id,
+                    'cancel_at_cycle_end' => $cancelAtCycleEnd,
                 ]);
-                return response()->json([
-                    'error' => 'Failed to cancel subscription. Please try again.',
-                ], 500);
             }
-
-            $subscription->update([
-                'status' => 'cancelled',
-                'metadata' => array_merge($subscription->metadata ?? [], [
-                    'cancelled_at' => now()->toIso8601String(),
-                ]),
-            ]);
-
-            return response()->json([
-                'message' => 'Subscription will be cancelled at the end of the current billing period.',
-                'current_period_end' => $subscription->current_period_end?->toIso8601String(),
-            ]);
-
         } catch (\Exception $e) {
-            Log::error('Subscription cancellation error', [
+            Log::warning('Razorpay cancel request error (our DB already updated)', [
                 'error' => $e->getMessage(),
                 'subscription_id' => $subscription->razorpay_subscription_id,
             ]);
-            return response()->json([
-                'error' => 'An error occurred. Please try again.',
-            ], 500);
         }
+
+        return response()->json([
+            'message' => 'Subscription will be cancelled at the end of the current billing period.',
+            'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+        ]);
     }
 }

@@ -149,6 +149,17 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                           padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
                           child: Column(
                             children: [
+                              if (!canUseTrial)
+                                Padding(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  child: Text(
+                                    'Free trial already used for this number. Subscribe to get full access.',
+                                    style: AppTypography.bodySmall(
+                                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
                               // Pricing card
                               _buildPricingCard(isDark, canUseTrial),
                               const SizedBox(height: 28),
@@ -235,7 +246,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 ),
               ),
               Text(
-                canUseTrial ? '10' : '199',
+                canUseTrial ? '2' : '99',
                 style: const TextStyle(
                   fontSize: 56,
                   fontWeight: FontWeight.w800,
@@ -258,12 +269,12 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               child: Column(
                 children: [
                   Text(
-                    '7 Days Free Trial',
+                    '7 Days Trial - ₹2',
                     style: AppTypography.titleMedium(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Then ₹199/month',
+                    'Then ₹99/month',
                     style: AppTypography.bodySmall(color: Colors.white70),
                   ),
                 ],
@@ -419,7 +430,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
-                    canUseTrial ? 'Start Free Trial' : 'Subscribe Now',
+                    canUseTrial ? 'Start Trial' : 'Subscribe Now',
                     style: AppTypography.titleMedium(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -434,7 +445,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        '₹10',
+                        '₹2',
                         style: AppTypography.labelMedium(color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                     ),

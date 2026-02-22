@@ -13,6 +13,7 @@ import '../../../core/utils/responsive_utils.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../auth/screens/login_screen.dart';
 import '../../subscription/providers/subscription_provider.dart';
+import '../../subscription/screens/subscription_screen.dart';
 import 'pay_calculation_info_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -137,17 +138,85 @@ class SettingsScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _checkForUpdates(BuildContext context) async {
-    // Opens Play Store app page so user can update if available
+  /// Returns true if current app version >= latest store version (by version string then build number).
+  bool _isCurrentVersionLatest() {
+    final curParts = AppConstants.appVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    final latParts = AppConstants.latestStoreVersion.split('.').map((e) => int.tryParse(e) ?? 0).toList();
+    for (var i = 0; i < 3; i++) {
+      final c = i < curParts.length ? curParts[i] : 0;
+      final l = i < latParts.length ? latParts[i] : 0;
+      if (c != l) return c > l;
+    }
+    final curBuild = int.tryParse(AppConstants.buildNumber) ?? 0;
+    final latBuild = int.tryParse(AppConstants.latestStoreBuildNumber) ?? 0;
+    return curBuild >= latBuild;
+  }
+
+  Future<void> _openPlayStore() async {
     const packageId = 'com.originlab.attendex';
     final uri = Uri.parse('https://play.google.com/store/apps/details?id=$packageId');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } else {
-      if (context.mounted) {
-        SnackbarUtils.showError('Could not open store');
-      }
     }
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isLatest = _isCurrentVersionLatest();
+
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.system_update, color: Colors.teal, size: 28),
+            const SizedBox(width: 12),
+            const Text('Check for updates'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isLatest)
+              Text(
+                'You have the latest version.\n\nVersion ${AppConstants.fullVersion}',
+                style: AppTypography.bodyMedium(
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                ),
+              )
+            else
+              Text(
+                'New version ${AppConstants.latestStoreFullVersion} available on the store.',
+                style: AppTypography.bodyMedium(
+                  color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          if (isLatest)
+            TextButton(
+              onPressed: () => NavigationUtils.pop(),
+              child: const Text('OK'),
+            )
+          else ...[
+            TextButton(
+              onPressed: () => NavigationUtils.pop(),
+              child: const Text('Later'),
+            ),
+            FilledButton(
+              onPressed: () {
+                NavigationUtils.pop();
+                _openPlayStore();
+              },
+              child: const Text('Update'),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   void _showAboutDialog(BuildContext context) {
@@ -331,7 +400,7 @@ class SettingsScreen extends StatelessWidget {
                   context,
                   icon: Icons.system_update_outlined,
                   title: 'Check for updates',
-                  subtitle: 'See new features on the store',
+                  subtitle: 'See if a newer version is available',
                   trailing: Icon(
                     Icons.chevron_right,
                     color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
@@ -486,38 +555,207 @@ class SettingsScreen extends StatelessWidget {
             ),
             child: const Center(child: CircularProgressIndicator()),
           )
-        else if (status?.hasFreeTrial ?? false)
-          _buildSubscriptionCard(
-            isDark: isDark,
-            isPremium: false,
-            title: 'Free Trial',
-            subtitle: 'Subscription will start from ${_formatDate(status?.trialEndsAt)}',
-            detail: status?.trialEndsAt != null
-                ? 'Enjoy premium features until then'
-                : 'Activate your plan to continue',
-            icon: Icons.schedule,
-          )
-        else if (status?.hasActivePlan ?? false)
-          _buildSubscriptionCard(
-            isDark: isDark,
-            isPremium: true,
-            title: 'Premium Active',
-            subtitle: 'Enjoying all premium features',
-            detail: 'Renews at ${_formatDate(status?.currentPeriodEnd)}',
-            icon: Icons.check_circle,
-          )
-        else
+        else if (status?.hasFreeTrial ?? false) ...[
+          if (status?.cancelAtPeriodEnd ?? false)
+            _buildSubscriptionCard(
+              isDark: isDark,
+              isPremium: false,
+              title: 'Trial until ${_formatDate(status?.trialEndsAt)}',
+              subtitle: 'You cancelled — you won\'t be charged when the trial ends.',
+              detail: 'Use premium features until trial end. Tap Activate again to resubscribe later.',
+              icon: Icons.schedule,
+            )
+          else
+            _buildSubscriptionCard(
+              isDark: isDark,
+              isPremium: false,
+              title: 'Free Trial',
+              subtitle: 'Subscription will start from ${_formatDate(status?.trialEndsAt)}',
+              detail: status?.trialEndsAt != null
+                  ? 'Enjoy premium features until then. Cancel before renewal below, or turn off autopay in your UPI app — you won\'t be charged at trial end; tap Activate again to subscribe later.'
+                  : 'Activate your plan to continue',
+              icon: Icons.schedule,
+            ),
+          if (status?.hasFreeTrial ?? false) ...[
+            const SizedBox(height: 12),
+            if (status?.cancelAtPeriodEnd ?? false)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => NavigationUtils.push(const SubscriptionScreen()),
+                  icon: const Icon(Icons.refresh, size: 20),
+                  label: const Text('Activate again'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryBlue,
+                    side: const BorderSide(color: AppColors.primaryBlue),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () => _confirmCancelTrial(context, subscriptionProvider, status?.trialEndsAt),
+                  icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.warningRed),
+                  label: Text(
+                    'Cancel before renewal',
+                    style: AppTypography.bodyMedium(color: AppColors.warningRed, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+          ],
+        ]
+        else if (status?.hasActivePlan ?? false) ...[
+          if (status?.isCancelledByUser ?? false)
+            _buildSubscriptionCard(
+              isDark: isDark,
+              isPremium: true,
+              title: 'Active until ${_formatDate(status?.currentPeriodEnd)}',
+              subtitle: 'You have access until the end of your billing period.',
+              detail: 'You cancelled. Your plan will not renew. Tap Activate again after this date to continue.',
+              icon: Icons.check_circle,
+            )
+          else if (status?.isAutopayCancelled ?? false)
+            _buildSubscriptionCard(
+              isDark: isDark,
+              isPremium: true,
+              title: 'Active until ${_formatDate(status?.currentPeriodEnd)}',
+              subtitle: 'You have access until the end of your billing period.',
+              detail: 'Autopay cancelled or paused. Activate again to use features after this period.',
+              icon: Icons.check_circle,
+            )
+          else
+            _buildSubscriptionCard(
+              isDark: isDark,
+              isPremium: true,
+              title: 'Premium Active',
+              subtitle: 'Enjoying all premium features',
+              detail: 'Renews at ${_formatDate(status?.currentPeriodEnd)}',
+              icon: Icons.check_circle,
+            ),
+          if (status?.hasActivePlan ?? false) ...[
+            const SizedBox(height: 12),
+            if (status?.isCancelledByUser == true || status?.isAutopayCancelled == true)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => NavigationUtils.push(const SubscriptionScreen()),
+                  icon: const Icon(Icons.refresh, size: 20),
+                  label: const Text('Activate again'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primaryBlue,
+                    side: const BorderSide(color: AppColors.primaryBlue),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () => _confirmCancelSubscription(context, subscriptionProvider),
+                  icon: const Icon(Icons.cancel_outlined, size: 20, color: AppColors.warningRed),
+                  label: Text(
+                    'Cancel subscription',
+                    style: AppTypography.bodyMedium(color: AppColors.warningRed, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+          ],
+        ]
+        else ...[
           _buildSubscriptionCard(
             isDark: isDark,
             isPremium: false,
             title: 'No Active Plan',
             subtitle: 'Subscribe to unlock premium features',
-            detail: '7-day free trial available',
+            detail: '7-day trial (₹2) then ₹99/month',
             icon: Icons.workspace_premium,
             isNeutral: true,
           ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => NavigationUtils.push(const SubscriptionScreen()),
+              icon: const Icon(Icons.workspace_premium, size: 20, color: Colors.white),
+              label: const Text('Activate again'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primaryBlue,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
       ],
     );
+  }
+
+  Future<void> _confirmCancelTrial(
+    BuildContext context,
+    SubscriptionProvider subscriptionProvider,
+    DateTime? trialEndsAt,
+  ) async {
+    final dateStr = trialEndsAt != null ? _formatDate(trialEndsAt) : 'trial end';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel before renewal'),
+        content: Text(
+          'You won\'t be charged when the trial ends. You can use premium features until $dateStr.\n\nTap Activate again later to resubscribe.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => NavigationUtils.pop(false),
+            child: const Text('Keep trial'),
+          ),
+          TextButton(
+            onPressed: () => NavigationUtils.pop(true),
+            child: const Text('Cancel before renewal', style: TextStyle(color: AppColors.warningRed)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await subscriptionProvider.cancelSubscription();
+
+        if (context.mounted) SnackbarUtils.showSuccess('You won\'t be charged. Use features until trial end.');
+      } catch (e) {
+        if (context.mounted) SnackbarUtils.showError(e.toString());
+      }
+    }
+  }
+
+  Future<void> _confirmCancelSubscription(BuildContext context, SubscriptionProvider subscriptionProvider) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel subscription'),
+        content: const Text(
+          'Your plan will not renew after the current period. You can keep using premium features until then.\n\nTap Activate again later to resubscribe.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => NavigationUtils.pop(false),
+            child: const Text('Keep subscription'),
+          ),
+          TextButton(
+            onPressed: () => NavigationUtils.pop(true),
+            child: const Text('Cancel at period end', style: TextStyle(color: AppColors.warningRed)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      try {
+        await subscriptionProvider.cancelSubscription();
+        if (context.mounted) SnackbarUtils.showSuccess('Subscription will end at the end of the current period.');
+      } catch (e) {
+        if (context.mounted) SnackbarUtils.showError(e.toString());
+      }
+    }
   }
 
   Widget _buildSubscriptionCard({

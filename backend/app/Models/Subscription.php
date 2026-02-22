@@ -13,6 +13,7 @@ class Subscription extends Model
         'razorpay_plan_id',
         'razorpay_customer_id',
         'status',
+        'cancel_at_period_end',
         'trial_ends_at',
         'current_period_start',
         'current_period_end',
@@ -23,6 +24,7 @@ class Subscription extends Model
     ];
 
     protected $casts = [
+        'cancel_at_period_end' => 'boolean',
         'trial_ends_at' => 'datetime',
         'current_period_start' => 'datetime',
         'current_period_end' => 'datetime',

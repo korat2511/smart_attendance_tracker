@@ -3,9 +3,14 @@ abstract class AppConstants {
   AppConstants._();
 
   static const String appName = 'Attendex';
-  static const String appVersion = '1.0.3';
-  static const String buildNumber = '4';
+  static const String appVersion = '1.0.5';
+  static const String buildNumber = '5';
   static String get fullVersion => '$appVersion ($buildNumber)';
+
+  /// Latest version on the store (update when you publish a new release so older apps can show "New version available").
+  static const String latestStoreVersion = '1.0.5';
+  static const String latestStoreBuildNumber = '5';
+  static String get latestStoreFullVersion => '$latestStoreVersion ($latestStoreBuildNumber)';
 
   /// Minimum supported Android SDK (if needed for checks)
   static const int minPasswordLength = 8;

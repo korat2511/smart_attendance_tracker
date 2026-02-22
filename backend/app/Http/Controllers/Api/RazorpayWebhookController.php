@@ -185,7 +185,7 @@ class RazorpayWebhookController extends Controller
             ? \Carbon\Carbon::createFromTimestamp($entity['current_end']) 
             : null;
 
-        $subscription->update([
+        $data = [
             'status' => $status,
             'current_period_start' => $currentStart,
             'current_period_end' => $currentEnd,
@@ -194,7 +194,11 @@ class RazorpayWebhookController extends Controller
                 'last_webhook_event' => $status,
                 'last_webhook_at' => now()->toIso8601String(),
             ]),
-        ]);
+        ];
+        if ($status === 'cancelled') {
+            $data['cancel_at_period_end'] = false;
+        }
+        $subscription->update($data);
 
         Log::info('Subscription updated via webhook', [
             'subscription_id' => $subscription->id,

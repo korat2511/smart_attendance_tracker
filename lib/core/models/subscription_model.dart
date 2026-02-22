@@ -4,6 +4,7 @@ class SubscriptionStatusModel {
   final DateTime? trialEndsAt;
   final String? subscriptionStatus;
   final DateTime? currentPeriodEnd;
+  final bool cancelAtPeriodEnd;
   final bool canUseTrial;
 
   SubscriptionStatusModel({
@@ -12,6 +13,7 @@ class SubscriptionStatusModel {
     this.trialEndsAt,
     this.subscriptionStatus,
     this.currentPeriodEnd,
+    this.cancelAtPeriodEnd = false,
     required this.canUseTrial,
   });
 
@@ -26,11 +28,18 @@ class SubscriptionStatusModel {
       currentPeriodEnd: json['current_period_end'] != null
           ? DateTime.parse(json['current_period_end'])
           : null,
+      cancelAtPeriodEnd: json['cancel_at_period_end'] ?? false,
       canUseTrial: json['can_use_trial'] ?? true,
     );
   }
 
   bool get hasValidAccess => hasActivePlan || hasFreeTrial;
+
+  /// User cancelled from app; plan will not renew after period end.
+  bool get isCancelledByUser => cancelAtPeriodEnd;
+
+  /// Autopay cancelled/paused from UPI/bank (Razorpay status halted).
+  bool get isAutopayCancelled => subscriptionStatus == 'halted';
 }
 
 class SubscriptionCreateResponse {
