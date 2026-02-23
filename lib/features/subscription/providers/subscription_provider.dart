@@ -52,6 +52,12 @@ class SubscriptionProvider extends ChangeNotifier {
     }
   }
 
+  /// Sync from Razorpay then refresh status (e.g. when opening Settings after payment).
+  Future<void> refreshSubscriptionStatus() async {
+    await _apiService.syncSubscription();
+    await checkSubscriptionStatus();
+  }
+
   Future<void> startSubscription({
     required String userName,
     required String userEmail,
@@ -98,6 +104,7 @@ class SubscriptionProvider extends ChangeNotifier {
     _isProcessingPayment = false;
     notifyListeners();
 
+    await _apiService.syncSubscription();
     await checkSubscriptionStatus();
     _onPaymentSuccess?.call();
   }

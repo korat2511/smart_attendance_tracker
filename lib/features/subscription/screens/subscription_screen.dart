@@ -3,9 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/typography/app_typography.dart';
 import '../../../core/utils/navigation_utils.dart';
 import '../../../core/utils/snackbar_utils.dart';
+import '../../../core/utils/focus_utils.dart';
+import '../../auth/screens/login_screen.dart';
 import '../../home/screens/home_screen.dart';
 import '../providers/subscription_provider.dart';
 
@@ -40,6 +43,40 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         SnackbarUtils.showError(error);
       },
     );
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    FocusUtils.unfocus();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Want to login from other number? You will be logged out.'),
+        actions: [
+          TextButton(
+            onPressed: () => NavigationUtils.pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => NavigationUtils.pop(true),
+            child: const Text('Logout now', style: TextStyle(color: AppColors.warningRed)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await ApiService().logout();
+      if (context.mounted) {
+        NavigationUtils.pushAndRemoveUntil(const LoginScreen());
+        SnackbarUtils.showSuccess('Logged out successfully');
+      }
+    } catch (e) {
+      if (context.mounted) SnackbarUtils.showError('Failed to logout');
+    }
   }
 
   @override
@@ -174,6 +211,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
                               
                               // Payment methods & terms
                               _buildFooter(isDark),
+                              const SizedBox(height: 24),
+                              
+                              // Logout option
+                              Center(
+                                child: TextButton(
+                                  onPressed: () => _handleLogout(context),
+                                  child: Text(
+                                    'Want to login from other number? Logout now',
+                                    style: AppTypography.bodyMedium(
+                                      color: AppColors.warningRed,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),

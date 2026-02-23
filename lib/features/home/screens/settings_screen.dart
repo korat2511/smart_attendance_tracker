@@ -16,8 +16,21 @@ import '../../subscription/providers/subscription_provider.dart';
 import '../../subscription/screens/subscription_screen.dart';
 import 'pay_calculation_info_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SubscriptionProvider>().checkSubscriptionStatus();
+    });
+  }
 
   Future<void> _handleLogout(BuildContext context) async {
     FocusUtils.unfocus();
@@ -569,7 +582,7 @@ class SettingsScreen extends StatelessWidget {
             _buildSubscriptionCard(
               isDark: isDark,
               isPremium: false,
-              title: 'Free Trial',
+              title: 'You are on trial',
               subtitle: 'Subscription will start from ${_formatDate(status?.trialEndsAt)}',
               detail: status?.trialEndsAt != null
                   ? 'Enjoy premium features until then. Cancel before renewal below, or turn off autopay in your UPI app — you won\'t be charged at trial end; tap Activate again to subscribe later.'
@@ -670,7 +683,9 @@ class SettingsScreen extends StatelessWidget {
             isPremium: false,
             title: 'No Active Plan',
             subtitle: 'Subscribe to unlock premium features',
-            detail: '7-day trial (₹2) then ₹99/month',
+            detail: (status?.canUseTrial ?? true)
+                ? '7-day trial (₹2) then ₹99/month'
+                : 'Subscribe for ₹99/month',
             icon: Icons.workspace_premium,
             isNeutral: true,
           ),

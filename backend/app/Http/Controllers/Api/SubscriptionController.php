@@ -26,7 +26,7 @@ class SubscriptionController extends Controller
     public function getStatus(Request $request)
     {
         $user = $request->user();
-        
+
         $subscription = Subscription::where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->first();
@@ -43,6 +43,35 @@ class SubscriptionController extends Controller
                 'cancel_at_period_end' => false,
                 'can_use_trial' => $canUseTrial,
             ]);
+        }
+
+        $hasActivePlanFromSub = function (Subscription $sub) {
+            $isActive = in_array($sub->status, ['active', 'authenticated']);
+            $isHalted = $sub->status === 'halted';
+            $hasAccessUntil = in_array($sub->status, ['active', 'authenticated', 'halted'])
+                && $sub->current_period_end
+                && $sub->current_period_end->endOfDay() >= now();
+            return ($isActive || $isHalted) && !$sub->isTrialing() && $hasAccessUntil;
+        };
+
+        if (!$subscription->isTrialing() && !$hasActivePlanFromSub($subscription)) {
+            $activePaid = Subscription::where('user_id', $user->id)
+                ->whereNotNull('current_period_end')
+                ->where('current_period_end', '>=', now())
+                ->orderBy('created_at', 'desc')
+                ->first();
+            if ($activePaid) {
+                $subscription = $activePaid;
+            } else {
+                $trialStillActive = Subscription::where('user_id', $user->id)
+                    ->whereNotNull('trial_ends_at')
+                    ->where('trial_ends_at', '>', now())
+                    ->orderBy('created_at', 'desc')
+                    ->first();
+                if ($trialStillActive) {
+                    $subscription = $trialStillActive;
+                }
+            }
         }
 
         $isTrialing = $subscription->isTrialing();
@@ -78,14 +107,28 @@ class SubscriptionController extends Controller
         $user = $request->user();
         $mobile = $user->mobile;
 
-        $existingActive = Subscription::where('user_id', $user->id)
-            ->whereIn('status', ['active', 'authenticated', 'pending'])
+        $latest = Subscription::where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
             ->first();
 
-        if ($existingActive) {
-            return response()->json([
-                'error' => 'You already have an active subscription.',
-            ], 400);
+        if ($latest && !in_array($latest->status, ['cancelled', 'completed', 'expired'])) {
+            if (!$latest->cancel_at_period_end) {
+                $razorpayData = $this->fetchSubscriptionFromRazorpay($latest->razorpay_subscription_id);
+                if ($razorpayData) {
+                    $rpStatus = $razorpayData['status'] ?? null;
+                    if (in_array($rpStatus, ['cancelled', 'completed', 'expired'])) {
+                        $latest->update(['status' => $rpStatus]);
+                    } else {
+                        return response()->json([
+                            'error' => 'You already have an active subscription.',
+                        ], 400);
+                    }
+                } else {
+                    return response()->json([
+                        'error' => 'You already have an active subscription.',
+                    ], 400);
+                }
+            }
         }
 
         $canUseTrial = $this->canUserUseTrial($user->id, $mobile);
@@ -170,6 +213,17 @@ class SubscriptionController extends Controller
             return response()->json([
                 'error' => 'An error occurred. Please try again.',
             ], 500);
+        }
+    }
+
+    private function fetchSubscriptionFromRazorpay(string $razorpaySubscriptionId): ?array
+    {
+        try {
+            $response = Http::withBasicAuth($this->keyId, $this->keySecret)
+                ->get("{$this->baseUrl}/subscriptions/{$razorpaySubscriptionId}");
+            return $response->successful() ? $response->json() : null;
+        } catch (\Throwable $e) {
+            return null;
         }
     }
 
@@ -266,5 +320,83 @@ class SubscriptionController extends Controller
             'message' => 'Subscription will be cancelled at the end of the current billing period.',
             'current_period_end' => $subscription->current_period_end?->toIso8601String(),
         ]);
+    }
+
+    /**
+     * Sync subscription from Razorpay API (status, current_period_start, current_period_end).
+     * Only updates DB when status or period dates have changed.
+     */
+    public function syncFromRazorpay(Request $request)
+    {
+        $user = $request->user();
+        $subscription = Subscription::where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->first();
+
+        if (!$subscription || !$subscription->razorpay_subscription_id) {
+            return response()->json(['message' => 'No subscription to sync'], 200);
+        }
+
+        try {
+            $response = Http::withBasicAuth($this->keyId, $this->keySecret)
+                ->get("{$this->baseUrl}/subscriptions/{$subscription->razorpay_subscription_id}");
+
+            if (!$response->successful()) {
+                return response()->json(['error' => 'Could not fetch subscription'], 502);
+            }
+
+            $data = $response->json();
+            $newStatus = $data['status'] ?? $subscription->status;
+            $currentStart = isset($data['current_start'])
+                ? \Carbon\Carbon::createFromTimestamp($data['current_start'])
+                : null;
+            $currentEnd = isset($data['current_end'])
+                ? \Carbon\Carbon::createFromTimestamp($data['current_end'])
+                : null;
+            $cancelAtCycleEnd = !empty($data['has_scheduled_changes']);
+            if ($newStatus === 'cancelled') {
+                $cancelAtCycleEnd = false;
+            }
+            // If our DB doesn't have cancel_at_period_end but Razorpay has scheduled cancel, fetch scheduled changes to repair.
+            if (!$cancelAtCycleEnd && in_array($newStatus, ['active', 'authenticated']) && !$subscription->cancel_at_period_end) {
+                $scheduled = Http::withBasicAuth($this->keyId, $this->keySecret)
+                    ->get("{$this->baseUrl}/subscriptions/{$subscription->razorpay_subscription_id}/retrieve_scheduled_changes");
+                if ($scheduled->successful() && !empty($scheduled->json()['has_scheduled_changes'])) {
+                    $cancelAtCycleEnd = true;
+                }
+            }
+
+            $statusChanged = $newStatus !== $subscription->status;
+            $startChanged = $currentStart && (!$subscription->current_period_start || $subscription->current_period_start->timestamp !== $currentStart->timestamp);
+            $endChanged = $currentEnd && (!$subscription->current_period_end || $subscription->current_period_end->timestamp !== $currentEnd->timestamp);
+            $cancelFlagChanged = ($cancelAtCycleEnd !== (bool) $subscription->cancel_at_period_end);
+
+            if (!$statusChanged && !$startChanged && !$endChanged && !$cancelFlagChanged) {
+                return response()->json([
+                    'message' => 'No change',
+                    'status' => $subscription->status,
+                    'current_period_start' => $subscription->current_period_start?->toIso8601String(),
+                    'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+                ], 200);
+            }
+
+            $subscription->update([
+                'status' => $newStatus,
+                'current_period_start' => $currentStart ?? $subscription->current_period_start,
+                'current_period_end' => $currentEnd ?? $subscription->current_period_end,
+                'cancel_at_period_end' => $newStatus === 'cancelled' ? false : ($cancelAtCycleEnd ? true : $subscription->cancel_at_period_end),
+                'metadata' => array_merge($subscription->metadata ?? [], ['last_sync_at' => now()->toIso8601String()]),
+            ]);
+
+            return response()->json([
+                'message' => 'Synced',
+                'status' => $subscription->status,
+                'current_period_start' => $subscription->current_period_start?->toIso8601String(),
+                'current_period_end' => $subscription->current_period_end?->toIso8601String(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Subscription sync error', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Sync failed'], 500);
+        }
     }
 }

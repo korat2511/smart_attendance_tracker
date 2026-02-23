@@ -813,6 +813,18 @@ class ApiService {
     });
   }
 
+  /// Sync subscription from Razorpay (status, period dates) so DB is up to date after payment.
+  Future<void> syncSubscription() async {
+    try {
+      await _handleRequest(() async {
+        return await http.post(
+          Uri.parse('${ApiConstants.basePath}/subscription/sync'),
+          headers: await _getHeaders(includeAuth: true),
+        );
+      });
+    } catch (_) {}
+  }
+
   T _handleResponse<T>(
     http.Response response,
     T Function(Map<String, dynamic>) fromJson,
@@ -858,15 +870,26 @@ class ApiService {
         );
       }
     } else if (statusCode >= 500) {
-      throw ApiException(
-        message: 'Server error. Please try again later.',
-        statusCode: statusCode,
-        type: ApiExceptionType.serverError,
-      );
+      try {
+        final json = jsonDecode(body) as Map<String, dynamic>;
+        final message = json['error']?.toString() ?? json['message']?.toString();
+        throw ApiException(
+          message: message ?? 'Server error. Please try again later.',
+          statusCode: statusCode,
+          type: ApiExceptionType.serverError,
+        );
+      } catch (e) {
+        if (e is ApiException) rethrow;
+        throw ApiException(
+          message: 'Server error. Please try again later.',
+          statusCode: statusCode,
+          type: ApiExceptionType.serverError,
+        );
+      }
     } else {
       try {
         final json = jsonDecode(body) as Map<String, dynamic>;
-        final message = json['message']?.toString() ?? 'Request failed';
+        final message = json['error']?.toString() ?? json['message']?.toString() ?? 'Request failed';
         throw ApiException(
           message: message,
           statusCode: statusCode,

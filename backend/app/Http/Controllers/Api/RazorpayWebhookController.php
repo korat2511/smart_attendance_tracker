@@ -6,10 +6,27 @@ use App\Http\Controllers\Controller;
 use App\Models\Subscription;
 use App\Models\SubscriptionTrial;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class RazorpayWebhookController extends Controller
 {
+    private function getRazorpaySubscription(string $subscriptionId): ?array
+    {
+        $keyId = config('services.razorpay.key_id', env('RAZORPAY_KEY_ID'));
+        $keySecret = config('services.razorpay.key_secret', env('RAZORPAY_KEY_SECRET'));
+        if (!$keyId || !$keySecret) {
+            return null;
+        }
+        $response = Http::withBasicAuth($keyId, $keySecret)
+            ->get("https://api.razorpay.com/v1/subscriptions/{$subscriptionId}");
+        if (!$response->successful()) {
+            Log::warning('Razorpay fetch subscription failed', ['id' => $subscriptionId, 'body' => $response->body()]);
+            return null;
+        }
+        return $response->json();
+    }
+
     public function handle(Request $request)
     {
         $payload = $request->all();
@@ -178,12 +195,24 @@ class RazorpayWebhookController extends Controller
             return null;
         }
 
-        $currentStart = isset($entity['current_start']) 
-            ? \Carbon\Carbon::createFromTimestamp($entity['current_start']) 
+        $currentStart = isset($entity['current_start'])
+            ? \Carbon\Carbon::createFromTimestamp($entity['current_start'])
             : null;
-        $currentEnd = isset($entity['current_end']) 
-            ? \Carbon\Carbon::createFromTimestamp($entity['current_end']) 
+        $currentEnd = isset($entity['current_end'])
+            ? \Carbon\Carbon::createFromTimestamp($entity['current_end'])
             : null;
+
+        if (($currentStart === null || $currentEnd === null) && in_array($status, ['active', 'authenticated'])) {
+            $fromApi = $this->getRazorpaySubscription($subscriptionId);
+            if ($fromApi) {
+                if ($currentStart === null && isset($fromApi['current_start'])) {
+                    $currentStart = \Carbon\Carbon::createFromTimestamp($fromApi['current_start']);
+                }
+                if ($currentEnd === null && isset($fromApi['current_end'])) {
+                    $currentEnd = \Carbon\Carbon::createFromTimestamp($fromApi['current_end']);
+                }
+            }
+        }
 
         $data = [
             'status' => $status,

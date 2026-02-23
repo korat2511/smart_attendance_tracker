@@ -88,6 +88,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/status', [SubscriptionController::class, 'getStatus']);
             Route::post('/create', [SubscriptionController::class, 'create']);
             Route::post('/cancel', [SubscriptionController::class, 'cancel']);
+            Route::post('/sync', [SubscriptionController::class, 'syncFromRazorpay']);
         });
         
         // Profile routes

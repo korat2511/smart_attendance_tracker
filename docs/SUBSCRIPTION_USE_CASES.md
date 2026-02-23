@@ -80,6 +80,12 @@ This document describes all possible subscription flows: signup, free trial, pai
 
 **Summary:** User keeps access until `current_period_end`; no further charges after that. App shows “cancelled paid” state with “Activate again”.
 
+**Razorpay dashboard:** When the user cancels “at period end”, Razorpay **keeps the subscription status as “Active”** until the billing period actually ends (e.g. 23 Mar 2026). So you will still see “Active”, “Next Due On”, and “Upcoming Invoice” in the dashboard until that date. **This is expected.** After the period end, Razorpay marks the subscription as “Cancelled” and sends the `subscription.cancelled` webhook.
+
+**Database:** Our backend sets `cancel_at_period_end` = true **as soon as** the user taps Cancel (POST subscription/cancel). If the DB still shows `cancel_at_period_end` = NULL for an active row, either (1) the cancel request hit an older backend that didn’t set it, or (2) sync hadn’t run yet. **Sync repair:** When the app calls POST subscription/sync (e.g. when opening Settings or refreshing status), we fetch the subscription from Razorpay and set `cancel_at_period_end` from Razorpay’s `has_scheduled_changes`; if the main GET doesn’t include it, we call `retrieve_scheduled_changes` so the DB is repaired. After the period end, the webhook sets `status` = `cancelled` and `cancel_at_period_end` = false.
+
+**Will it update at the end date?** Yes. At the end of the billing period, Razorpay will stop the subscription and send `subscription.cancelled`. Our webhook will then set `status` = `cancelled` and `cancel_at_period_end` = false in the database.
+
 ---
 
 ## 6. Cancel after 2–3 autopay (paid user, has been charged 2–3 times)
