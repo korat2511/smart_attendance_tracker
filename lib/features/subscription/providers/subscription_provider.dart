@@ -79,7 +79,7 @@ class SubscriptionProvider extends ChangeNotifier {
         'subscription_id': response.subscriptionId,
         'name': 'AttendEx',
         'description': response.hasTrial
-            ? '7-Day Trial (₹2) + ₹99/month'
+            ? '1-Day Trial (₹2) then ₹99/month'
             : '₹99/month Subscription',
         'prefill': {
           'name': userName,

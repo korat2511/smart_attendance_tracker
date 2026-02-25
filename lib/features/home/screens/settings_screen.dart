@@ -684,7 +684,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: 'No Active Plan',
             subtitle: 'Subscribe to unlock premium features',
             detail: (status?.canUseTrial ?? true)
-                ? '7-day trial (₹2) then ₹99/month'
+                ? '1-day trial (₹2) then ₹99/month'
                 : 'Subscribe for ₹99/month',
             icon: Icons.workspace_premium,
             isNeutral: true,

@@ -321,7 +321,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
               child: Column(
                 children: [
                   Text(
-                    '7 Days Trial - ₹2',
+                    '1 Day Trial - ₹2',
                     style: AppTypography.titleMedium(color: Colors.white, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),

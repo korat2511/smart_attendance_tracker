@@ -149,12 +149,12 @@ class SubscriptionController extends Controller
             ];
 
             if ($canUseTrial) {
-                $trialEndTimestamp = now()->addDays(7)->timestamp;
+                $trialEndTimestamp = now()->addDays(1)->timestamp;
                 $subscriptionData['start_at'] = $trialEndTimestamp;
                 $subscriptionData['addons'] = [
                     [
                         'item' => [
-                            'name' => '7-Day Trial',
+                            'name' => '1-Day Trial',
                             'amount' => 200,
                             'currency' => 'INR',
                         ],
@@ -183,7 +183,7 @@ class SubscriptionController extends Controller
                 'razorpay_plan_id' => $this->planId,
                 'razorpay_customer_id' => $customerId,
                 'status' => $razorpaySubscription['status'],
-                'trial_ends_at' => $canUseTrial ? now()->addDays(7) : null,
+                'trial_ends_at' => $canUseTrial ? now()->addDays(1) : null,
                 'amount' => 99.00,
                 'currency' => 'INR',
                 'metadata' => $razorpaySubscription,
