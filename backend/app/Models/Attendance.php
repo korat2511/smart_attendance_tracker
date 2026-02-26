@@ -18,6 +18,7 @@ class Attendance extends Model
         'worked_hours',
         'pay_multiplier',
         'advance_amount',
+        'advance_payment_method',
     ];
 
     protected $casts = [

@@ -15,6 +15,7 @@ class CashbookIncome extends Model
         'date',
         'amount',
         'description',
+        'payment_method',
     ];
 
     protected $casts = [

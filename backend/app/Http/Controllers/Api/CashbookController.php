@@ -87,6 +87,7 @@ class CashbookController extends Controller
                     'date' => $row->date->format('Y-m-d'),
                     'description' => $row->description ?? 'Income',
                     'amount' => (float) $row->amount,
+                    'payment_method' => $row->payment_method ?? 'other',
                 ];
             });
 
@@ -104,6 +105,7 @@ class CashbookController extends Controller
                     'date' => $row->date->format('Y-m-d'),
                     'description' => $row->description ?? 'Expense',
                     'amount' => (float) $row->amount,
+                    'payment_method' => $row->payment_method ?? 'other',
                 ];
             });
 
@@ -123,6 +125,7 @@ class CashbookController extends Controller
                     'date' => $attendance->date->format('Y-m-d'),
                     'description' => 'Advance given to ' . $staffName,
                     'amount' => (float) $attendance->advance_amount,
+                    'payment_method' => $attendance->advance_payment_method ?? 'other',
                 ];
             });
 
@@ -149,6 +152,7 @@ class CashbookController extends Controller
             'date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'description' => 'nullable|string|max:500',
+            'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
         ]);
 
         $income = CashbookIncome::create([
@@ -156,6 +160,7 @@ class CashbookController extends Controller
             'date' => $validated['date'],
             'amount' => $validated['amount'],
             'description' => $validated['description'] ?? null,
+            'payment_method' => $validated['payment_method'] ?? 'other',
         ]);
 
         return response()->json([
@@ -167,6 +172,7 @@ class CashbookController extends Controller
                     'date' => $income->date->format('Y-m-d'),
                     'amount' => (float) $income->amount,
                     'description' => $income->description,
+                    'payment_method' => $income->payment_method ?? 'other',
                 ],
             ],
         ], 201);
@@ -181,6 +187,7 @@ class CashbookController extends Controller
             'date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'description' => 'nullable|string|max:500',
+            'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
         ]);
 
         $expense = CashbookExpense::create([
@@ -188,6 +195,7 @@ class CashbookController extends Controller
             'date' => $validated['date'],
             'amount' => $validated['amount'],
             'description' => $validated['description'] ?? null,
+            'payment_method' => $validated['payment_method'] ?? 'other',
         ]);
 
         return response()->json([
@@ -199,6 +207,7 @@ class CashbookController extends Controller
                     'date' => $expense->date->format('Y-m-d'),
                     'amount' => (float) $expense->amount,
                     'description' => $expense->description,
+                    'payment_method' => $expense->payment_method ?? 'other',
                 ],
             ],
         ], 201);
@@ -275,12 +284,14 @@ class CashbookController extends Controller
             'date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'description' => 'nullable|string|max:500',
+            'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
         ]);
 
         $income->update([
             'date' => $validated['date'],
             'amount' => $validated['amount'],
             'description' => $validated['description'] ?? null,
+            'payment_method' => $validated['payment_method'] ?? 'other',
         ]);
 
         return response()->json([
@@ -292,6 +303,7 @@ class CashbookController extends Controller
                     'date' => $income->date->format('Y-m-d'),
                     'amount' => (float) $income->amount,
                     'description' => $income->description,
+                    'payment_method' => $income->payment_method ?? 'other',
                 ],
             ],
         ], 200);
@@ -318,12 +330,14 @@ class CashbookController extends Controller
             'date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'description' => 'nullable|string|max:500',
+            'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
         ]);
 
         $expense->update([
             'date' => $validated['date'],
             'amount' => $validated['amount'],
             'description' => $validated['description'] ?? null,
+            'payment_method' => $validated['payment_method'] ?? 'other',
         ]);
 
         return response()->json([
@@ -335,6 +349,7 @@ class CashbookController extends Controller
                     'date' => $expense->date->format('Y-m-d'),
                     'amount' => (float) $expense->amount,
                     'description' => $expense->description,
+                    'payment_method' => $expense->payment_method ?? 'other',
                 ],
             ],
         ], 200);

@@ -1,23 +1,21 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
-
 import 'package:smart_attendance_tracker/main.dart';
-import 'package:smart_attendance_tracker/core/core.dart';
 
 void main() {
   testWidgets('App displays correctly', (WidgetTester tester) async {
     // Build our app and trigger a frame.
-    await tester.pumpWidget(
-      ChangeNotifierProvider(
-        create: (_) => ThemeProvider(),
-        child: const SmartAttendanceTrackerApp(),
-      ),
-    );
+    await tester.pumpWidget(const SmartAttendanceTrackerApp());
 
-    // Verify that the app name appears in the app bar.
-    expect(find.text('Smart Attendance Tracker'), findsWidgets);
+    // Wait for splash screen to build.
+    await tester.pump();
+
+    // Verify that the app title appears on the splash screen.
+    expect(find.text('Smart Attendance Tracker'), findsOneWidget);
 
     // Verify that the subtitle text appears.
-    expect(find.text('MVP · Provider · Light/Dark theme ready'), findsOneWidget);
+    expect(find.text('Manage your team attendance'), findsOneWidget);
+
+    // Allow the splash screen's 2-second delay timer to complete so no pending timer remains when the test ends.
+    await tester.pump(const Duration(seconds: 3));
   });
 }

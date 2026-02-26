@@ -197,6 +197,7 @@ class AttendanceController extends Controller
                 'worked_hours' => (float) $attendance->worked_hours,
                 'pay_multiplier' => (float) $attendance->pay_multiplier,
                 'advance_amount' => (float) $attendance->advance_amount,
+                'advance_payment_method' => $attendance->advance_payment_method ?? 'other',
             ];
         });
 
@@ -239,6 +240,7 @@ class AttendanceController extends Controller
             'date' => 'required|date',
             'amount' => 'required|numeric|min:0',
             'notes' => 'nullable|string|max:500',
+            'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
         ]);
 
         $staff = Staff::where('id', $validated['staff_id'])
@@ -249,17 +251,19 @@ class AttendanceController extends Controller
             ->where('date', $validated['date'])
             ->first();
 
+        $advanceData = [
+            'advance_amount' => $validated['amount'],
+            'advance_payment_method' => $validated['payment_method'] ?? 'other',
+        ];
+
         if ($attendance) {
-            $attendance->update([
-                'advance_amount' => $validated['amount'],
-            ]);
+            $attendance->update($advanceData);
         } else {
-            $attendance = Attendance::create([
+            $attendance = Attendance::create(array_merge([
                 'staff_id' => $validated['staff_id'],
                 'date' => $validated['date'],
                 'status' => 'absent',
-                'advance_amount' => $validated['amount'],
-            ]);
+            ], $advanceData));
         }
 
         return response()->json([
@@ -277,6 +281,7 @@ class AttendanceController extends Controller
                     'worked_hours' => (float) $attendance->worked_hours,
                     'pay_multiplier' => (float) $attendance->pay_multiplier,
                     'advance_amount' => (float) $attendance->advance_amount,
+                    'advance_payment_method' => $attendance->advance_payment_method ?? 'other',
                 ],
             ],
         ], 200);
@@ -300,9 +305,13 @@ class AttendanceController extends Controller
 
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0',
+            'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
         ]);
 
-        $attendance->update(['advance_amount' => $validated['amount']]);
+        $attendance->update([
+            'advance_amount' => $validated['amount'],
+            'advance_payment_method' => $validated['payment_method'] ?? $attendance->advance_payment_method ?? 'other',
+        ]);
 
         return response()->json([
             'success' => true,
@@ -313,6 +322,7 @@ class AttendanceController extends Controller
                     'staff_id' => $attendance->staff_id,
                     'date' => $attendance->date->format('Y-m-d'),
                     'advance_amount' => (float) $attendance->advance_amount,
+                    'advance_payment_method' => $attendance->advance_payment_method ?? 'other',
                 ],
             ],
         ], 200);

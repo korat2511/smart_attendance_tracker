@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'core/core.dart';
-import 'core/utils/navigation_utils.dart';
-import 'features/auth/screens/splash_screen.dart';
-import 'features/staff/providers/staff_provider.dart';
-import 'features/staff/providers/attendance_provider.dart';
-import 'features/staff/providers/report_provider.dart';
-import 'features/home/providers/home_provider.dart';
-import 'features/home/providers/cashbook_provider.dart';
-import 'features/subscription/providers/subscription_provider.dart';
+import 'package:smart_attendance_tracker/configuration/app_constants.dart';
+import 'package:smart_attendance_tracker/configuration/theme_provider.dart';
+import 'package:smart_attendance_tracker/utils/navigation_utils.dart';
+import 'package:smart_attendance_tracker/ui/screens/auth/splash_screen.dart';
+import 'package:smart_attendance_tracker/ui/providers/staff_provider.dart';
+import 'package:smart_attendance_tracker/ui/providers/attendance_provider.dart';
+import 'package:smart_attendance_tracker/ui/providers/report_provider.dart';
+import 'package:smart_attendance_tracker/ui/providers/home_provider.dart';
+import 'package:smart_attendance_tracker/ui/providers/cashbook_provider.dart';
+import 'package:smart_attendance_tracker/ui/providers/subscription_provider.dart';
 
 void main() {
   runApp(const SmartAttendanceTrackerApp());
