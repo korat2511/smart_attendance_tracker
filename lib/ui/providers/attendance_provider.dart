@@ -27,16 +27,20 @@ class AttendanceProvider extends ChangeNotifier {
     required int staffId,
     required DateTime month,
   }) async {
+    final now = DateTime.now();
+    final targetMonth = (month.year > now.year || (month.year == now.year && month.month > now.month))
+        ? now
+        : month;
     _isLoading = true;
     _errorMessage = null;
-    _selectedMonth = month;
+    _selectedMonth = targetMonth;
     notifyListeners();
 
     try {
       final result = await ApiService().getAttendance(
         staffId: staffId,
-        month: month.month,
-        year: month.year,
+        month: targetMonth.month,
+        year: targetMonth.year,
       );
 
       final summary = result['summary'] as AttendanceSummaryModel;
@@ -293,6 +297,11 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   void changeMonth(DateTime newMonth) {
+    final now = DateTime.now();
+    // Never allow navigating to a future month
+    if (newMonth.year > now.year || (newMonth.year == now.year && newMonth.month > now.month)) {
+      return;
+    }
     _selectedMonth = newMonth;
     notifyListeners();
   }

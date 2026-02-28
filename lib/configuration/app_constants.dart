@@ -2,14 +2,9 @@ abstract class AppConstants {
   AppConstants._();
 
   static const String appName = 'AttendEx';
-  static const String appVersion = '1.0.6';
-  static const String buildNumber = '6';
+  static const String appVersion = '1.0.7';
+  static const String buildNumber = '7';
   static String get fullVersion => '$appVersion ($buildNumber)';
-
-  static const String latestStoreVersion = '1.0.6';
-  static const String latestStoreBuildNumber = '6';
-  static String get latestStoreFullVersion => '$latestStoreVersion ($latestStoreBuildNumber)';
-
 
   static const int minPasswordLength = 8;
   static const int maxNameLength = 100;

@@ -628,6 +628,31 @@ class ApiService {
     return LaborReportModel.fromJson(data);
   }
 
+  /// Record a custom payment for a staff period (month/year). Replaces amount paid for that period.
+  /// Payment is also created as a cashbook expense with the given payment_method.
+  Future<void> recordLaborReportPayment({
+    required int staffId,
+    required int month,
+    required int year,
+    required double amount,
+    String paymentMethod = 'other',
+  }) async {
+    final uri = Uri.parse('${ApiConstants.basePath}/report/labor/$staffId/payment');
+    final response = await _handleRequest(() async {
+      return await http.post(
+        uri,
+        headers: await _getHeaders(includeAuth: true),
+        body: jsonEncode({
+          'month': month,
+          'year': year,
+          'amount': amount,
+          'payment_method': paymentMethod,
+        }),
+      );
+    });
+    _handleResponse<Map<String, dynamic>>(response, (json) => json);
+  }
+
   // Cashbook APIs (income, expenses; advances appear as expenses automatically)
   Future<CashbookOverviewModel> getCashbookOverview({
     required int month,

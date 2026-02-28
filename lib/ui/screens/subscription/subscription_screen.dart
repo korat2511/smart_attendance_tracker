@@ -20,6 +20,8 @@ class SubscriptionScreen extends StatefulWidget {
 }
 
 class _SubscriptionScreenState extends State<SubscriptionScreen> {
+  bool _hasCheckedRedirect = false;
+
   @override
   void initState() {
     super.initState();
@@ -39,7 +41,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       onSuccess: () {
         NavigationUtils.pushAndRemoveUntil(const HomeScreen());
       },
-      onError: (error) {
+      onError: (String error) async {
+        if (error.contains('already have an active subscription')) {
+          await context.read<SubscriptionProvider>().refreshSubscriptionStatus();
+          if (!mounted) return;
+          if (context.read<SubscriptionProvider>().hasValidAccess) {
+            NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+            return;
+          }
+        }
         SnackbarUtils.showError(error);
       },
     );
@@ -89,6 +99,15 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       body: Consumer<SubscriptionProvider>(
         builder: (context, provider, _) {
           if (provider.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (provider.hasValidAccess && !_hasCheckedRedirect) {
+            _hasCheckedRedirect = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (!mounted) return;
+              NavigationUtils.pushAndRemoveUntil(const HomeScreen());
+            });
             return const Center(child: CircularProgressIndicator());
           }
 

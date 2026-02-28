@@ -1,16 +1,5 @@
-# smart_attendance_tracker
+# Attendex
 
-A new Flutter project.
+Mobile app for tracking staff attendance, marking present/absent/off, recording overtime and advance payments, and managing income/expenses. Built with Flutter and a Laravel API backend.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+You get a staff list (add from contacts or manually), mark attendance per day, give advances (UPI, bank transfer, cash, other), and see labor reports. There’s a cashbook for income and expenses with the same payment method options. The app uses Razorpay for subscriptions (trial + monthly plan). Light/dark theme is supported.

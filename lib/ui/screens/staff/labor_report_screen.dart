@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:smart_attendance_tracker/configuration/app_colors.dart';
+import 'package:smart_attendance_tracker/configuration/app_constants.dart';
 import 'package:smart_attendance_tracker/configuration/app_typography.dart';
+import 'package:smart_attendance_tracker/models/report_model.dart';
 import 'package:smart_attendance_tracker/models/staff_model.dart';
+import 'package:smart_attendance_tracker/services/api_service.dart';
 import 'package:smart_attendance_tracker/utils/navigation_utils.dart';
 import 'package:smart_attendance_tracker/utils/responsive_utils.dart';
 import 'package:smart_attendance_tracker/utils/focus_utils.dart';
+import 'package:smart_attendance_tracker/utils/snackbar_utils.dart';
 import 'package:smart_attendance_tracker/ui/providers/report_provider.dart';
 
 class LaborReportScreen extends StatefulWidget {
@@ -52,20 +56,18 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
 
   String _getMonthName(int month) {
     const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December'
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
     ];
     return months[month - 1];
+  }
+
+  String _formatPaymentDate(DateTime d) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
   @override
@@ -475,9 +477,84 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
               const Divider(height: 24),
               _buildPaymentRow('Total Earnings', '₹${payment.totalEarnings.toStringAsFixed(2)}', isDark, true),
               const Divider(height: 24),
-              _buildPaymentRow('Advance Payments', '-₹${payment.advancePayments.toStringAsFixed(2)}', isDark, false),
+              _buildPaymentRow('Advance Payments', '-₹${payment.advancePayments.toStringAsFixed(2)}', isDark, false, rowType: 'deduction'),
               const Divider(height: 24),
-              _buildPaymentRow('Net Payment', '₹${payment.netPayment.toStringAsFixed(2)}', isDark, true, isNet: true),
+              _buildPaymentRowWithNote(
+                'Net Payment (${_getMonthName(report.month)} ${report.year})',
+                '₹${payment.netPayment.toStringAsFixed(2)}',
+                isDark,
+                true,
+                note: 'Earnings this month after advance',
+                rowType: 'net',
+              ),
+              if (payment.previousDueTotal > 0) ...[
+                const Divider(height: 24),
+                _buildPreviousDueSection(payment, isDark, report),
+              ],
+
+              if (payment.previousDueTotal > 0) ...[
+                const Divider(height: 24),
+                _buildPaymentRowWithNote(
+                  'Total amount due',
+                  '₹${payment.totalAmountDue.toStringAsFixed(2)}',
+                  isDark,
+                  true,
+                  note: 'Previous due + This month net',
+                  rowType: 'totalDue',
+                ),
+              ],
+
+
+              if (payment.amountPaidThisPeriod > 0) ...[
+                const Divider(height: 24),
+                _buildPaymentRowWithNote(
+                  payment.amountPaidAt != null
+                      ? 'Amount paid this period on \n${_formatPaymentDate(payment.amountPaidAt!)}'
+                      : 'Amount paid this period',
+                  '₹${payment.amountPaidThisPeriod.toStringAsFixed(2)}',
+                  isDark,
+                  false,
+                  note: 'Recorded in expenses',
+                  rowType: 'amountPaid',
+                ),
+              ],
+
+              if ((payment.amountPaidThisPeriod > 0 || payment.remainingDueThisPeriod < payment.netPayment) && payment.remainingDueThisPeriod != payment.remainingTotalDue && payment.remainingDueThisPeriod != 0) ...[
+                const Divider(height: 24),
+                _buildPaymentRowWithNote(
+                  'Remaining due this period',
+                  '₹${payment.remainingDueThisPeriod.toStringAsFixed(2)}',
+                  isDark,
+                  true,
+                  note: 'Net − Paid this period',
+                  rowType: 'remainingDue',
+                ),
+              ],
+
+
+              const Divider(height: 24),
+              _buildPaymentRowWithNote(
+                'Remaining total due',
+                '₹${payment.remainingTotalDue.toStringAsFixed(2)}',
+                isDark,
+                true,
+                note: 'After all payments (amount to pay now)',
+                rowType: 'remainingTotalDue',
+              ),
+              const Divider(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showPayDialog(context, report, reportProvider, isDark),
+                  icon: const Icon(Icons.payment, size: 20),
+                  label: const Text('Pay'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: AppColors.primaryBlue,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -485,7 +562,199 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
     );
   }
 
-  Widget _buildPaymentRow(String label, String value, bool isDark, bool isBold, {bool isNet = false, Color? valueColor}) {
+  Widget _buildPreviousDueSection(PaymentSummaryModel payment, bool isDark, LaborReportModel report) {
+    final breakdown = payment.previousDueBreakdown;
+    const note = 'From earlier months';
+    if (breakdown.isEmpty) {
+      return _buildPaymentRowWithNote(
+        'Previous due',
+        '₹${payment.previousDueTotal.toStringAsFixed(2)}',
+        isDark,
+        true,
+        note: note,
+        rowType: 'remainingDue',
+      );
+    }
+    if (breakdown.length == 1) {
+      return _buildPaymentRowWithNote(
+        'Previous due',
+        '₹${payment.previousDueTotal.toStringAsFixed(2)}',
+        isDark,
+        true,
+        note: note,
+        rowType: 'remainingDue',
+      );
+    }
+    final parts = breakdown.map((e) => '${e.monthLabel} - ${e.due.toStringAsFixed(0)}').join(' + ');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildPaymentRow('Total previous due', '₹${payment.previousDueTotal.toStringAsFixed(2)}', isDark, true, rowType: 'remainingDue'),
+        const SizedBox(height: 4),
+        Padding(
+          padding: const EdgeInsets.only(left: 0),
+          child: Text(
+            '$note ($parts)',
+            style: AppTypography.bodySmall(
+              color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPaymentRowWithNote(
+    String label,
+    String value,
+    bool isDark,
+    bool isBold, {
+    String? note,
+    Color? valueColor,
+    String? rowType,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildPaymentRow(label, value, isDark, isBold, valueColor: valueColor, rowType: rowType),
+        if (note != null && note.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 0),
+            child: Text(
+              note,
+              style: AppTypography.bodySmall(
+                color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _showPayDialog(BuildContext context, LaborReportModel report, ReportProvider reportProvider, bool isDark) async {
+    FocusUtils.unfocus();
+    final amountController = TextEditingController();
+    final maxDue = report.paymentSummary.remainingTotalDue;
+    amountController.text = maxDue > 0 ? maxDue.toStringAsFixed(0) : report.paymentSummary.netPayment.toStringAsFixed(0);
+    String selectedPaymentMethod = AppConstants.defaultPaymentMethod;
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Record payment'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Remaining total due: ₹${maxDue.toStringAsFixed(2)}',
+                    style: AppTypography.bodyMedium(
+                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                      labelText: 'Amount paid (₹)',
+                      border: OutlineInputBorder(),
+                      hintText: '0',
+                    ),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Payment method',
+                    style: AppTypography.labelMedium(
+                      color: isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: AppConstants.paymentMethods.map((e) {
+                      final isSelected = selectedPaymentMethod == e.key;
+                      return FilterChip(
+                        label: Text(e.value),
+                        selected: isSelected,
+                        onSelected: (_) => setState(() => selectedPaymentMethod = e.key),
+                        selectedColor: AppColors.primaryBlue.withOpacity(0.3),
+                        checkmarkColor: AppColors.primaryBlue,
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(null),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () {
+                  final text = amountController.text.trim();
+                  final amount = double.tryParse(text);
+                  if (amount == null || amount < 0) {
+                    SnackbarUtils.showError('Enter a valid amount');
+                    return;
+                  }
+                  Navigator.of(ctx).pop({'submitted': true, 'amount': amount, 'paymentMethod': selectedPaymentMethod});
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (!context.mounted || result == null || result['submitted'] != true) return;
+    final amount = (result['amount'] as num).toDouble();
+    final paymentMethod = result['paymentMethod'] as String? ?? AppConstants.defaultPaymentMethod;
+    try {
+      await ApiService().recordLaborReportPayment(
+        staffId: report.staffId,
+        month: report.month,
+        year: report.year,
+        amount: amount,
+        paymentMethod: paymentMethod,
+      );
+      SnackbarUtils.showSuccess('Payment recorded (will appear in expenses)');
+      await reportProvider.loadReport(staffId: report.staffId, month: DateTime(report.year, report.month));
+    } catch (e) {
+      if (context.mounted) SnackbarUtils.showError(e.toString());
+    }
+  }
+
+  /// Row type for color coding: earnings (default), deduction (advance), net (blue), amountPaid (green), remainingDue (slate), totalDue (bold), remainingTotalDue (blue bold).
+  Widget _buildPaymentRow(
+    String label,
+    String value,
+    bool isDark,
+    bool isBold, {
+    Color? valueColor,
+    String? rowType,
+  }) {
+    Color effectiveColor = valueColor ??
+        (rowType == 'deduction'
+            ? (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight)
+            : rowType == 'net'
+                ? AppColors.primaryBlue
+                : rowType == 'amountPaid'
+                    ? AppColors.successGreen
+                    : rowType == 'remainingDue'
+                        ? AppColors.slateDark
+                        : rowType == 'remainingTotalDue'
+                            ? AppColors.primaryBlue
+                            : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight));
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -499,10 +768,8 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
         Text(
           value,
           style: AppTypography.bodyMedium(
-            color: valueColor ?? (isNet
-                ? AppColors.primaryBlue
-                : (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)),
-            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            color: effectiveColor,
+            fontWeight: (isBold || rowType == 'remainingTotalDue' || rowType == 'net') ? FontWeight.bold : FontWeight.normal,
           ),
         ),
       ],

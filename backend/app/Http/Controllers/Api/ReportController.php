@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
+use App\Models\CashbookExpense;
 use App\Models\Staff;
+use App\Models\StaffPeriodPayment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -76,12 +78,28 @@ class ReportController extends Controller
         $advancePayments = $attendances->sum('advance_amount');
         $netPayment = $totalEarnings - $advancePayments;
 
+        // Amount paid this period (custom payments) and previous due
+        $periodPaymentRow = StaffPeriodPayment::where('staff_id', $staffId)
+            ->where('year', $year)
+            ->where('month', $month)
+            ->first();
+        $amountPaidThisPeriod = $periodPaymentRow ? (float) $periodPaymentRow->amount_paid : 0.0;
+        $amountPaidAt = $periodPaymentRow && $periodPaymentRow->updated_at ? $periodPaymentRow->updated_at->toIso8601String() : null;
+        $remainingDueThisPeriod = max(0, $netPayment - $amountPaidThisPeriod);
+
+        $previousData = $this->getPreviousDueBreakdown($staff, $month, $year);
+        $previousDueBreakdown = $previousData['breakdown'];
+        $previousBalanceTotal = (float) ($previousData['balance_total'] ?? 0);
+        $previousDueTotal = $previousBalanceTotal > 0 ? $previousBalanceTotal : 0.0;
+        $totalAmountDue = max(0, $previousBalanceTotal + $netPayment);
+        $remainingTotalDue = max(0, $previousBalanceTotal + $remainingDueThisPeriod);
+
         // Calculate total worked hours and overtime hours
         $totalWorkedHours = $this->calculateTotalWorkedHours($attendances, $staff->salary_type);
         $totalOvertimeHours = $attendances->sum('overtime_hours');
 
         // Format attendance details
-        $attendanceDetails = $attendances->map(function ($attendance) use ($staff, $month, $year) {
+        $attendanceDetails = $attendances->map(function ($attendance) use ($staff, $month, $year, $weekOffCount) {
             $status = $attendance->status;
             if ($status === 'present' && $attendance->overtime_hours > 0) {
                 $status = 'OT';
@@ -152,6 +170,13 @@ class ReportController extends Controller
                     'total_earnings' => round($totalEarnings, 2),
                     'advance_payments' => round($advancePayments, 2),
                     'net_payment' => round($netPayment, 2),
+                    'amount_paid_this_period' => round($amountPaidThisPeriod, 2),
+                    'amount_paid_at' => $amountPaidAt,
+                    'remaining_due_this_period' => round($remainingDueThisPeriod, 2),
+                    'previous_due_total' => round($previousDueTotal, 2),
+                    'previous_due_breakdown' => $previousDueBreakdown,
+                    'total_amount_due' => round($totalAmountDue, 2),
+                    'remaining_total_due' => round($remainingTotalDue, 2),
                     'total_worked_hours' => round($totalWorkedHours, 2),
                     'total_overtime_hours' => round($totalOvertimeHours, 2),
                 ],
@@ -416,5 +441,138 @@ class ReportController extends Controller
         }
 
         return $dailyEarnings;
+    }
+
+    /**
+     * Compute net payment (total_earnings - advance) for a staff period from attendance.
+     */
+    private function computePeriodNetPayment(Staff $staff, int $month, int $year): float
+    {
+        $attendances = Attendance::where('staff_id', $staff->id)
+            ->whereYear('date', $year)
+            ->whereMonth('date', $month)
+            ->get();
+        if ($attendances->isEmpty()) {
+            return 0.0;
+        }
+        $weekOffCount = $attendances->where('status', 'off')->count();
+        $presentCount = $attendances->where('status', 'present')->count();
+        $halfDayCount = $attendances->where('status', 'half_day')->count();
+        $basicEarnings = $this->calculateBasicEarnings(
+            $staff->salary_type,
+            (float) $staff->salary_amount,
+            $presentCount,
+            $halfDayCount,
+            $month,
+            $year,
+            $attendances,
+            $weekOffCount
+        );
+        $overtimeEarnings = $this->calculateOvertimeEarnings(
+            (float) $staff->overtime_charges,
+            $attendances
+        );
+        $advancePayments = $attendances->sum('advance_amount');
+        return $basicEarnings + $overtimeEarnings - $advancePayments;
+    }
+
+    /**
+     * Get previous due breakdown and total balance before the current period.
+     *
+     * balance_total is the sum of (net - amount_paid) for all past months.
+     * It can be positive (overall due) or negative (overall credit).
+     * The breakdown only includes months where the balance is positive (actual due).
+     */
+    private function getPreviousDueBreakdown(Staff $staff, int $reportMonth, int $reportYear): array
+    {
+        $pastPeriods = Attendance::where('staff_id', $staff->id)
+            ->whereRaw('(YEAR(date) < ?) OR (YEAR(date) = ? AND MONTH(date) < ?)', [$reportYear, $reportYear, $reportMonth])
+            ->selectRaw('YEAR(date) as year, MONTH(date) as month')
+            ->groupByRaw('YEAR(date), MONTH(date)')
+            ->orderByRaw('YEAR(date) DESC, MONTH(date) DESC')
+            ->limit(24)
+            ->get();
+
+        $paymentMap = StaffPeriodPayment::where('staff_id', $staff->id)
+            ->get()
+            ->keyBy(fn ($r) => $r->year . '-' . $r->month);
+
+        $monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        $breakdown = [];
+        $balanceTotal = 0.0;
+
+        foreach ($pastPeriods as $p) {
+            $net = $this->computePeriodNetPayment($staff, (int) $p->month, (int) $p->year);
+            $rec = $paymentMap->get($p->year . '-' . $p->month);
+            $amountPaid = $rec ? (float) $rec->amount_paid : 0.0;
+            $balance = round($net - $amountPaid, 2);
+            $balanceTotal += $balance;
+
+            if ($balance <= 0) {
+                // Credit or fully-paid month: affects balance_total but not positive due breakdown.
+                continue;
+            }
+
+            $breakdown[] = [
+                'year' => (int) $p->year,
+                'month' => (int) $p->month,
+                'month_label' => $monthNames[(int) $p->month - 1] . ' ' . $p->year,
+                'net' => round($net, 2),
+                'amount_paid' => round($amountPaid, 2),
+                'due' => $balance,
+            ];
+        }
+
+        return [
+            'breakdown' => $breakdown,
+            'balance_total' => $balanceTotal,
+        ];
+    }
+
+    /**
+     * Record a custom payment for a staff period (upserts amount_paid for that month).
+     * Also creates a cashbook expense so the payment appears in expenses with payment method.
+     */
+    public function recordPayment(Request $request, $staffId)
+    {
+        $validated = $request->validate([
+            'month' => 'required|integer|min:1|max:12',
+            'year' => 'required|integer|min:2000|max:2100',
+            'amount' => 'required|numeric|min:0',
+            'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
+        ]);
+
+        $staff = Staff::where('id', $staffId)
+            ->where('user_id', $request->user()->id)
+            ->firstOrFail();
+
+        $paymentMethod = $validated['payment_method'] ?? 'other';
+        $monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        $monthLabel = $monthNames[$validated['month'] - 1] . ' ' . $validated['year'];
+
+        StaffPeriodPayment::updateOrCreate(
+            [
+                'staff_id' => $staff->id,
+                'year' => $validated['year'],
+                'month' => $validated['month'],
+            ],
+            [
+                'amount_paid' => $validated['amount'],
+                'payment_method' => $paymentMethod,
+            ]
+        );
+
+        CashbookExpense::create([
+            'user_id' => $request->user()->id,
+            'date' => now()->toDateString(),
+            'amount' => $validated['amount'],
+            'description' => 'Staff payment: ' . $staff->name . ' - ' . $monthLabel,
+            'payment_method' => $paymentMethod,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Payment recorded successfully',
+        ], 200);
     }
 }

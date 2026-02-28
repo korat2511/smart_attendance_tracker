@@ -85,6 +85,35 @@ class AttendanceReportSummary {
   }
 }
 
+class PreviousDueItem {
+  final int year;
+  final int month;
+  final String monthLabel;
+  final double net;
+  final double amountPaid;
+  final double due;
+
+  PreviousDueItem({
+    required this.year,
+    required this.month,
+    required this.monthLabel,
+    required this.net,
+    required this.amountPaid,
+    required this.due,
+  });
+
+  factory PreviousDueItem.fromJson(Map<String, dynamic> json) {
+    return PreviousDueItem(
+      year: _toInt(json['year']),
+      month: _toInt(json['month']),
+      monthLabel: json['month_label'] as String? ?? '',
+      net: _toDouble(json['net']),
+      amountPaid: _toDouble(json['amount_paid']),
+      due: _toDouble(json['due']),
+    );
+  }
+}
+
 class PaymentSummaryModel {
   final double basicEarnings;
   final double overtimeEarnings;
@@ -93,6 +122,13 @@ class PaymentSummaryModel {
   final double netPayment;
   final double totalWorkedHours;
   final double totalOvertimeHours;
+  final double amountPaidThisPeriod;
+  final DateTime? amountPaidAt;
+  final double remainingDueThisPeriod;
+  final double previousDueTotal;
+  final List<PreviousDueItem> previousDueBreakdown;
+  final double totalAmountDue;
+  final double remainingTotalDue;
 
   PaymentSummaryModel({
     required this.basicEarnings,
@@ -102,17 +138,41 @@ class PaymentSummaryModel {
     required this.netPayment,
     this.totalWorkedHours = 0.0,
     this.totalOvertimeHours = 0.0,
+    this.amountPaidThisPeriod = 0.0,
+    this.amountPaidAt,
+    this.remainingDueThisPeriod = 0.0,
+    this.previousDueTotal = 0.0,
+    this.previousDueBreakdown = const [],
+    this.totalAmountDue = 0.0,
+    this.remainingTotalDue = 0.0,
   });
 
   factory PaymentSummaryModel.fromJson(Map<String, dynamic> json) {
+    final breakdown = json['previous_due_breakdown'] as List<dynamic>?;
+    final netPayment = _toDouble(json['net_payment']);
+    final previousDueTotal = _toDouble(json['previous_due_total']);
+    final amountPaidThisPeriod = _toDouble(json['amount_paid_this_period']);
+    final remainingDueThisPeriod = _toDouble(json['remaining_due_this_period']);
+    final totalAmountDueJson = _toDouble(json['total_amount_due']);
+    final remainingTotalDueJson = _toDouble(json['remaining_total_due']);
     return PaymentSummaryModel(
       basicEarnings: _toDouble(json['basic_earnings']),
       overtimeEarnings: _toDouble(json['overtime_earnings']),
       totalEarnings: _toDouble(json['total_earnings']),
       advancePayments: _toDouble(json['advance_payments']),
-      netPayment: _toDouble(json['net_payment']),
+      netPayment: netPayment,
       totalWorkedHours: _toDouble(json['total_worked_hours']),
       totalOvertimeHours: _toDouble(json['total_overtime_hours']),
+      amountPaidThisPeriod: amountPaidThisPeriod,
+      amountPaidAt: json['amount_paid_at'] != null ? DateTime.tryParse(json['amount_paid_at'] as String) : null,
+      remainingDueThisPeriod: remainingDueThisPeriod,
+      previousDueTotal: previousDueTotal,
+      previousDueBreakdown: breakdown
+              ?.map((e) => PreviousDueItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      totalAmountDue: totalAmountDueJson > 0 ? totalAmountDueJson : previousDueTotal + netPayment,
+      remainingTotalDue: remainingTotalDueJson > 0 ? remainingTotalDueJson : previousDueTotal + remainingDueThisPeriod,
     );
   }
 }

@@ -21,7 +21,12 @@ class CashbookProvider extends ChangeNotifier {
   }
 
   Future<void> loadData({DateTime? month}) async {
-    final targetMonth = month ?? _selectedMonth ?? DateTime.now();
+    final now = DateTime.now();
+    var targetMonth = month ?? _selectedMonth ?? now;
+    // Never allow loading a future month
+    if (targetMonth.year > now.year || (targetMonth.year == now.year && targetMonth.month > now.month)) {
+      targetMonth = now;
+    }
     _selectedMonth = targetMonth;
     _isLoading = true;
     _errorMessage = null;
@@ -50,8 +55,14 @@ class CashbookProvider extends ChangeNotifier {
   }
 
   void changeMonth(int direction) {
-    final current = _selectedMonth ?? DateTime.now();
-    _selectedMonth = DateTime(current.year, current.month + direction);
+    final now = DateTime.now();
+    final current = _selectedMonth ?? now;
+    final newMonth = DateTime(current.year, current.month + direction);
+    // Never allow navigating to a future month
+    if (newMonth.year > now.year || (newMonth.year == now.year && newMonth.month > now.month)) {
+      return;
+    }
+    _selectedMonth = newMonth;
     notifyListeners();
   }
 

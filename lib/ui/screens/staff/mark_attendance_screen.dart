@@ -93,11 +93,16 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   }
 
   void _changeMonth(int direction, AttendanceProvider attendanceProvider) {
-    final currentMonth = attendanceProvider.selectedMonth ?? DateTime.now();
+    final now = DateTime.now();
+    final currentMonth = attendanceProvider.selectedMonth ?? now;
     final newMonth = DateTime(
       currentMonth.year,
       currentMonth.month + direction,
     );
+    // Do not allow navigating to future months
+    if (newMonth.year > now.year || (newMonth.year == now.year && newMonth.month > now.month)) {
+      return;
+    }
     attendanceProvider.changeMonth(newMonth);
     attendanceProvider.loadAttendanceData(
       staffId: widget.staff.id ?? 0,
@@ -105,7 +110,6 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     );
     
     // If navigating to current month, scroll to current day
-    final now = DateTime.now();
     if (newMonth.year == now.year && newMonth.month == now.month) {
       _scrollToCurrentDay();
     } else {
@@ -467,7 +471,10 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
   }
 
   Widget _buildMonthNavigation(BuildContext context, ThemeData theme, bool isDark, AttendanceProvider attendanceProvider) {
-    final selectedMonth = attendanceProvider.selectedMonth ?? DateTime.now();
+    final now = DateTime.now();
+    final selectedMonth = attendanceProvider.selectedMonth ?? now;
+    final canGoNext = selectedMonth.year < now.year ||
+        (selectedMonth.year == now.year && selectedMonth.month < now.month);
     return Container(
       color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -486,10 +493,15 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
               fontWeight: FontWeight.w600,
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.chevron_right),
-            onPressed: () => _changeMonth(1, attendanceProvider),
-            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+          AbsorbPointer(
+            absorbing: !canGoNext,
+            child: IconButton(
+              icon: const Icon(Icons.chevron_right),
+              onPressed: canGoNext ? () => _changeMonth(1, attendanceProvider) : null,
+              color: canGoNext
+                  ? (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)
+                  : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+            ),
           ),
         ],
       ),
@@ -782,5 +794,4 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       ),
     );
   }
-
 }

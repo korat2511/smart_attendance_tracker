@@ -38,8 +38,13 @@ class _CashbookScreenState extends State<CashbookScreen> {
   }
 
   void _changeMonth(int direction, CashbookProvider provider) {
-    final current = provider.selectedMonth ?? DateTime.now();
+    final now = DateTime.now();
+    final current = provider.selectedMonth ?? now;
     final newMonth = DateTime(current.year, current.month + direction);
+    // Do not allow navigating to future months
+    if (newMonth.year > now.year || (newMonth.year == now.year && newMonth.month > now.month)) {
+      return;
+    }
     provider.changeMonth(direction);
     provider.loadData(month: newMonth);
   }
@@ -171,38 +176,52 @@ class _CashbookScreenState extends State<CashbookScreen> {
                     ],
                   ),
                 ),
-                // Month swiper (same design as mark_attendance_screen)
-                Container(
-                  color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.chevron_left),
-                        onPressed: () => _changeMonth(-1, provider),
-                        color: isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight,
+                // Month swiper (same design as mark_attendance_screen) - no future months
+                Builder(
+                  builder: (context) {
+                    final now = DateTime.now();
+                    final canGoNext = selectedMonth.year < now.year ||
+                        (selectedMonth.year == now.year && selectedMonth.month < now.month);
+                    return Container(
+                      color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.chevron_left),
+                            onPressed: () => _changeMonth(-1, provider),
+                            color: isDark
+                                ? AppColors.textPrimaryDark
+                                : AppColors.textPrimaryLight,
+                          ),
+                          Text(
+                            _getMonthYearString(selectedMonth),
+                            style: AppTypography.titleMedium(
+                              color: isDark
+                                  ? AppColors.textPrimaryDark
+                                  : AppColors.textPrimaryLight,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          AbsorbPointer(
+                            absorbing: !canGoNext,
+                            child: IconButton(
+                              icon: const Icon(Icons.chevron_right),
+                              onPressed: canGoNext ? () => _changeMonth(1, provider) : null,
+                              color: canGoNext
+                                  ? (isDark
+                                      ? AppColors.textPrimaryDark
+                                      : AppColors.textPrimaryLight)
+                                  : (isDark
+                                      ? AppColors.textSecondaryDark
+                                      : AppColors.textSecondaryLight),
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        _getMonthYearString(selectedMonth),
-                        style: AppTypography.titleMedium(
-                          color: isDark
-                              ? AppColors.textPrimaryDark
-                              : AppColors.textPrimaryLight,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.chevron_right),
-                        onPressed: () => _changeMonth(1, provider),
-                        color: isDark
-                            ? AppColors.textPrimaryDark
-                            : AppColors.textPrimaryLight,
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
                 // Transaction list
                 Expanded(
