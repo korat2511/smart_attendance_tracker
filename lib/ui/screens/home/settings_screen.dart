@@ -540,20 +540,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSubscriptionCard(
               isDark: isDark,
               isPremium: false,
-              title: 'Trial until ${_formatDate(status?.trialEndsAt)}',
-              subtitle: 'You cancelled — you won\'t be charged when the trial ends.',
-              detail: 'Use premium features until trial end. Tap Activate again to resubscribe later.',
+              title: 'Trial active',
+              subtitle: 'Ends on ${_formatDate(status?.trialEndsAt)}',
+              detail: 'You have cancelled renewal. You can use all features until the trial end date.',
               icon: Icons.schedule,
             )
           else
             _buildSubscriptionCard(
               isDark: isDark,
               isPremium: false,
-              title: 'You are on trial',
-              subtitle: 'Subscription will start from ${_formatDate(status?.trialEndsAt)}',
+              title: 'Trial active',
+              subtitle: status?.trialEndsAt != null
+                  ? 'Ends on ${_formatDate(status?.trialEndsAt)}'
+                  : 'Trial is active',
               detail: status?.trialEndsAt != null
-                  ? 'Enjoy premium features until then. Cancel before renewal below, or turn off autopay in your UPI app — you won\'t be charged at trial end; tap Activate again to subscribe later.'
-                  : 'Activate your plan to continue',
+                  ? 'You can use all premium features during the trial. After this date charges may start as per your bank and Razorpay.'
+                  : 'You can use all premium features during the trial.',
               icon: Icons.schedule,
             ),
           if (status?.hasFreeTrial ?? false) ...[
@@ -649,10 +651,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             isDark: isDark,
             isPremium: false,
             title: 'No Active Plan',
-            subtitle: 'Subscribe to unlock premium features',
+            subtitle: 'Subscribe to unlock all features',
             detail: (status?.canUseTrial ?? true)
-                ? '1-day trial (₹2) then ₹99/month'
-                : 'Subscribe for ₹99/month',
+                ? 'Start a 1 day trial for ₹2 and then continue for ₹99 per month.'
+                : 'Subscribe for ₹99 per month to continue using premium features.',
             icon: Icons.workspace_premium,
             isNeutral: true,
           ),
@@ -685,7 +687,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel before renewal'),
         content: Text(
-          'You won\'t be charged when the trial ends. You can use premium features until $dateStr.\n\nTap Activate again later to resubscribe.',
+          'You will keep access until $dateStr. After that your trial will end and charges will not start from this app side.',
         ),
         actions: [
           TextButton(
@@ -703,7 +705,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       try {
         await subscriptionProvider.cancelSubscription();
 
-        if (context.mounted) SnackbarUtils.showSuccess('You won\'t be charged. Use features until trial end.');
+        if (context.mounted) SnackbarUtils.showSuccess('Trial will end after the current period. You can use features until then.');
       } catch (e) {
         if (context.mounted) SnackbarUtils.showError(e.toString());
       }

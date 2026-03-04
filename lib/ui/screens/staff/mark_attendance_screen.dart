@@ -255,23 +255,27 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => AdvancePaymentBottomSheet(
-        date: date,
-        initialAmount: currentAdvance,
-        initialNotes: null,
-        onSave: (amount, notes, paymentMethod) async {
-          await attendanceProvider.markAdvance(
-            staffId: widget.staff.id ?? 0,
-            date: date,
-            amount: amount,
-            notes: notes,
-            paymentMethod: paymentMethod,
-          );
-          if (context.mounted) {
-            SnackbarUtils.showSuccess('Advance marked successfully');
-          }
-        },
-      ),
+      builder: (context) {
+        final existingNotes = attendanceProvider.attendanceMap[day]?.advanceNotes;
+        return AdvancePaymentBottomSheet(
+          date: date,
+          initialAmount: currentAdvance,
+          initialNotes: existingNotes,
+          initialPaymentMethod: null,
+          onSave: (amount, notes, paymentMethod) async {
+            await attendanceProvider.markAdvance(
+              staffId: widget.staff.id ?? 0,
+              date: date,
+              amount: amount,
+              notes: notes,
+              paymentMethod: paymentMethod,
+            );
+            if (context.mounted) {
+              SnackbarUtils.showSuccess('Advance marked successfully');
+            }
+          },
+        );
+      },
     );
   }
 
@@ -427,8 +431,7 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
     required String label,
   }) {
     return Container(
-      height: 110, // Fixed height for all cards
-      padding: const EdgeInsets.symmetric(horizontal: 8,vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
         color: isDark ? AppColors.surfaceDark : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -448,11 +451,14 @@ class _MarkAttendanceScreenState extends State<MarkAttendanceScreen> {
         children: [
           Icon(icon, color: iconColor, size: 24),
           const SizedBox(height: 8),
-          Text(
-            count,
-            style: AppTypography.titleLarge(
-              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-              fontWeight: FontWeight.bold,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              count,
+              style: AppTypography.titleLarge(
+                color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
           const SizedBox(height: 4),

@@ -567,10 +567,14 @@ class _CashbookScreenState extends State<CashbookScreen> {
                         AdvancePaymentBottomSheet(
                           date: t.date,
                           initialAmount: t.amount,
-                          initialNotes: null,
+                          initialNotes: t.notes,
                           initialPaymentMethod: t.paymentMethod,
                           onSave: (amount, notes, paymentMethod) async {
-                            await provider.updateAdvance(t.id, amount, paymentMethod: paymentMethod);
+                            await provider.updateAdvance(
+                              t.id,
+                              amount,
+                              paymentMethod: paymentMethod,
+                            );
                             if (mounted) SnackbarUtils.showSuccess('Advance updated');
                           },
                         ),

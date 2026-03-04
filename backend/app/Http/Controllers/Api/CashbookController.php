@@ -119,6 +119,7 @@ class CashbookController extends Controller
             ->get()
             ->map(function ($attendance) {
                 $staffName = $attendance->staff->name ?? 'Staff';
+                $notes = $attendance->advance_notes;
                 return [
                     'id' => 'advance_' . $attendance->id,
                     'type' => 'expense',
@@ -126,6 +127,7 @@ class CashbookController extends Controller
                     'description' => 'Advance given to ' . $staffName,
                     'amount' => (float) $attendance->advance_amount,
                     'payment_method' => $attendance->advance_payment_method ?? 'other',
+                    'notes' => $notes,
                 ];
             });
 

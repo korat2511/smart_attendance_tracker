@@ -198,6 +198,7 @@ class AttendanceController extends Controller
                 'pay_multiplier' => (float) $attendance->pay_multiplier,
                 'advance_amount' => (float) $attendance->advance_amount,
                 'advance_payment_method' => $attendance->advance_payment_method ?? 'other',
+                'advance_notes' => $attendance->advance_notes,
             ];
         });
 
@@ -254,6 +255,7 @@ class AttendanceController extends Controller
         $advanceData = [
             'advance_amount' => $validated['amount'],
             'advance_payment_method' => $validated['payment_method'] ?? 'other',
+            'advance_notes' => $validated['notes'] ?? null,
         ];
 
         if ($attendance) {
@@ -282,6 +284,7 @@ class AttendanceController extends Controller
                     'pay_multiplier' => (float) $attendance->pay_multiplier,
                     'advance_amount' => (float) $attendance->advance_amount,
                     'advance_payment_method' => $attendance->advance_payment_method ?? 'other',
+                    'advance_notes' => $attendance->advance_notes,
                 ],
             ],
         ], 200);
@@ -306,11 +309,13 @@ class AttendanceController extends Controller
         $validated = $request->validate([
             'amount' => 'required|numeric|min:0',
             'payment_method' => 'nullable|string|in:upi,bank_transfer,cash,other',
+            'notes' => 'nullable|string|max:500',
         ]);
 
         $attendance->update([
             'advance_amount' => $validated['amount'],
             'advance_payment_method' => $validated['payment_method'] ?? $attendance->advance_payment_method ?? 'other',
+            'advance_notes' => $validated['notes'] ?? $attendance->advance_notes,
         ]);
 
         return response()->json([
@@ -323,6 +328,7 @@ class AttendanceController extends Controller
                     'date' => $attendance->date->format('Y-m-d'),
                     'advance_amount' => (float) $attendance->advance_amount,
                     'advance_payment_method' => $attendance->advance_payment_method ?? 'other',
+                    'advance_notes' => $attendance->advance_notes,
                 ],
             ],
         ], 200);
@@ -344,7 +350,10 @@ class AttendanceController extends Controller
             ], 404);
         }
 
-        $attendance->update(['advance_amount' => 0]);
+        $attendance->update([
+            'advance_amount' => 0,
+            'advance_notes' => null,
+        ]);
 
         return response()->json([
             'success' => true,

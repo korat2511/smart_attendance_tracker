@@ -9,6 +9,7 @@ class AttendanceModel {
   final double advanceAmount;
   final double workedHours;
   final double payMultiplier;
+  final String? advanceNotes;
 
   AttendanceModel({
     this.id,
@@ -21,6 +22,7 @@ class AttendanceModel {
     this.advanceAmount = 0.0,
     this.workedHours = 0.0,
     this.payMultiplier = 1.0,
+    this.advanceNotes,
   });
 
   bool get hasOvertime => overtimeHours > 0;
@@ -44,6 +46,7 @@ class AttendanceModel {
     double? advanceAmount,
     double? workedHours,
     double? payMultiplier,
+    String? advanceNotes,
   }) {
     return AttendanceModel(
       id: id ?? this.id,
@@ -56,6 +59,7 @@ class AttendanceModel {
       advanceAmount: advanceAmount ?? this.advanceAmount,
       workedHours: workedHours ?? this.workedHours,
       payMultiplier: payMultiplier ?? this.payMultiplier,
+      advanceNotes: advanceNotes ?? this.advanceNotes,
     );
   }
 
@@ -71,6 +75,7 @@ class AttendanceModel {
       advanceAmount: (json['advance_amount'] as num?)?.toDouble() ?? 0.0,
       workedHours: (json['worked_hours'] as num?)?.toDouble() ?? 0.0,
       payMultiplier: (json['pay_multiplier'] as num?)?.toDouble() ?? 1.0,
+      advanceNotes: json['advance_notes'] as String?,
     );
   }
 
@@ -86,6 +91,7 @@ class AttendanceModel {
       'advance_amount': advanceAmount,
       'worked_hours': workedHours,
       'pay_multiplier': payMultiplier,
+      if (advanceNotes != null) 'advance_notes': advanceNotes,
     };
   }
 }

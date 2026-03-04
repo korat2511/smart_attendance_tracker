@@ -267,13 +267,30 @@ class AttendanceProvider extends ChangeNotifier {
     final oldAdvance = _advanceMap[day] ?? 0.0;
     final oldTotal = _advanceTotal;
     final oldAttendance = _attendanceMap[day];
+    final oldPresentCount = _presentCount;
+    final oldAbsentCount = _absentCount;
 
     // Optimistic update
     _advanceMap[day] = amount;
     _advanceTotal = _advanceTotal - oldAdvance + amount;
 
     if (oldAttendance != null) {
-      _attendanceMap[day] = oldAttendance.copyWith(advanceAmount: amount);
+      _attendanceMap[day] = oldAttendance.copyWith(
+        advanceAmount: amount,
+        advanceNotes: notes,
+      );
+    } else {
+      // No attendance yet for this day. Backend will create an absent record.
+      final newAttendance = AttendanceModel(
+        id: null,
+        staffId: staffId,
+        date: date,
+        status: 'A',
+        advanceAmount: amount,
+        advanceNotes: notes,
+      );
+      _attendanceMap[day] = newAttendance;
+      _updateCounts(null, 'A');
     }
     notifyListeners();
 
@@ -290,6 +307,8 @@ class AttendanceProvider extends ChangeNotifier {
       _advanceMap[day] = oldAdvance;
       _advanceTotal = oldTotal;
       _attendanceMap[day] = oldAttendance;
+       _presentCount = oldPresentCount;
+       _absentCount = oldAbsentCount;
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;

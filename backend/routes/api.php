@@ -70,6 +70,7 @@ Route::prefix('v1')->group(function () {
         Route::prefix('report')->group(function () {
             Route::get('/labor/{staffId}', [ReportController::class, 'getLaborReport']);
             Route::post('/labor/{staffId}/payment', [ReportController::class, 'recordPayment']);
+            Route::get('/labor/{staffId}/pdf', [ReportController::class, 'downloadLaborReportPdf']);
         });
 
         // Cashbook routes (income, expenses; advances appear as expenses automatically)

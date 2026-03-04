@@ -19,6 +19,7 @@ class Attendance extends Model
         'pay_multiplier',
         'advance_amount',
         'advance_payment_method',
+        'advance_notes',
     ];
 
     protected $casts = [

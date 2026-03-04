@@ -6,6 +6,10 @@ import 'package:smart_attendance_tracker/configuration/app_typography.dart';
 import 'package:smart_attendance_tracker/models/report_model.dart';
 import 'package:smart_attendance_tracker/models/staff_model.dart';
 import 'package:smart_attendance_tracker/services/api_service.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:smart_attendance_tracker/utils/navigation_utils.dart';
 import 'package:smart_attendance_tracker/utils/responsive_utils.dart';
 import 'package:smart_attendance_tracker/utils/focus_utils.dart';
@@ -27,6 +31,7 @@ class LaborReportScreen extends StatefulWidget {
 }
 
 class _LaborReportScreenState extends State<LaborReportScreen> {
+  bool _isGeneratingPdf = false;
   @override
   void initState() {
     super.initState();
@@ -85,6 +90,7 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
           builder: (context, reportProvider, _) {
             return Column(
               children: [
+
                 // Content
                 Expanded(
                   child: reportProvider.isLoading
@@ -147,9 +153,13 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
                                     children: [
                                       // Labor Report Card
                                       _buildLaborReportCard(context, theme, isDark, reportProvider),
-                                      
-                                      const SizedBox(height: 24),
-                                      
+                                      const SizedBox(height: 12),
+
+Divider(),
+                                      _buildMonthNavigation(isDark, reportProvider),
+                                      Divider(),
+                                      const SizedBox(height: 12),
+
                                       // Attendance Summary
                                       _buildAttendanceSummary(context, theme, isDark, reportProvider),
                                       
@@ -201,6 +211,62 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
           },
         ),
       ],
+    );
+  }
+
+  Widget _buildMonthNavigation(bool isDark, ReportProvider reportProvider) {
+    final now = DateTime.now();
+    final report = reportProvider.report;
+    final selectedMonth = reportProvider.selectedMonth ??
+        (report != null ? DateTime(report.year, report.month) : now);
+    final canGoNext = selectedMonth.year < now.year ||
+        (selectedMonth.year == now.year && selectedMonth.month < now.month);
+
+    return Container(
+decoration: BoxDecoration(
+  color: isDark ? AppColors.surfaceDark : AppColors.surfaceLight,
+
+
+),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed: () => _changeMonth(-1, reportProvider, selectedMonth),
+            color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+          ),
+          Text(
+            '${_getMonthName(selectedMonth.month)} ${selectedMonth.year}',
+            style: AppTypography.titleMedium(
+              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          AbsorbPointer(
+            absorbing: !canGoNext,
+            child: IconButton(
+              icon: const Icon(Icons.chevron_right),
+              onPressed: canGoNext ? () => _changeMonth(1, reportProvider, selectedMonth) : null,
+              color: canGoNext
+                  ? (isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight)
+                  : (isDark ? AppColors.textSecondaryDark : AppColors.textSecondaryLight),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _changeMonth(int direction, ReportProvider reportProvider, DateTime currentMonth) {
+    final now = DateTime.now();
+    final newMonth = DateTime(currentMonth.year, currentMonth.month + direction);
+    if (newMonth.year > now.year || (newMonth.year == now.year && newMonth.month > now.month)) {
+      return;
+    }
+    reportProvider.loadReport(
+      staffId: widget.staff.id ?? 0,
+      month: newMonth,
     );
   }
 
@@ -777,7 +843,8 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
   }
 
   Widget _buildAttendanceDetails(BuildContext context, ThemeData theme, bool isDark, ReportProvider reportProvider) {
-    final details = reportProvider.report!.attendanceDetails;
+    final report = reportProvider.report!;
+    final details = report.attendanceDetails;
     
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -912,12 +979,31 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  Text(
-                                    '₹${detail.dailyEarnings.toStringAsFixed(2)}',
-                                    style: AppTypography.titleMedium(
-                                      color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                                  Builder(
+                                    builder: (_) {
+                                      // If there is overtime, show basic + OT amount breakdown.
+                                      if (detail.overtimeHours > 0 && report.overtimeCharges > 0) {
+                                        final otAmount = detail.overtimeHours * report.overtimeCharges;
+                                        final basicAmount = detail.dailyEarnings - otAmount;
+                                        if (basicAmount > 0) {
+                                          return Text(
+                                            '₹${basicAmount.toStringAsFixed(0)} + ${otAmount.toStringAsFixed(0)} (OT)',
+                                            style: AppTypography.titleMedium(
+                                              color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                      // Fallback: show total earnings only.
+                                      return Text(
+                                        '₹${detail.dailyEarnings.toStringAsFixed(2)}',
+                                        style: AppTypography.titleMedium(
+                                          color: isDark ? AppColors.textPrimaryDark : AppColors.textPrimaryLight,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      );
+                                    },
                                   ),
                                   if (detail.advanceAmount > 0)
                                     Text(
@@ -982,22 +1068,6 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
                                     ),
                                   ],
                                 ],
-                                if (detail.overtimeHours > 0) ...[
-                                  if (detail.inTime != null || detail.outTime != null || detail.workedHours > 0) const SizedBox(width: 12),
-                                  Icon(
-                                    Icons.access_time,
-                                    size: 14,
-                                    color: Colors.orange,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'OT: ${detail.overtimeHours.toStringAsFixed(2)}h',
-                                    style: AppTypography.bodySmall(
-                                      color: Colors.orange,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
                               ],
                             ),
                           ],
@@ -1031,11 +1101,62 @@ class _LaborReportScreenState extends State<LaborReportScreen> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () {
-          // TODO: Implement PDF generation and sharing
+        onPressed: _isGeneratingPdf
+            ? null
+            : () async {
+        if (_isGeneratingPdf) return;
+        setState(() {
+          _isGeneratingPdf = true;
+        });
+          final reportProvider = context.read<ReportProvider>();
+          final report = reportProvider.report;
+          if (report == null) {
+            SnackbarUtils.showError('Report not loaded yet');
+            if (mounted) {
+              setState(() {
+                _isGeneratingPdf = false;
+              });
+            }
+            return;
+          }
+          try {
+            final bytes = await ApiService().downloadLaborReportPdf(
+              staffId: report.staffId,
+              month: report.month,
+              year: report.year,
+            );
+            final dir = await getTemporaryDirectory();
+            final file = File(
+              '${dir.path}/labor_report_${report.staffId}_${report.year}_${report.month}.pdf',
+            );
+            await file.writeAsBytes(bytes, flush: true);
+
+            await Share.shareXFiles(
+              [XFile(file.path)],
+              text:
+                  'Labor report for ${report.staffName} for ${_getMonthName(report.month)} ${report.year}.',
+            );
+          } catch (e) {
+            SnackbarUtils.showError(e.toString());
+          } finally {
+            if (mounted) {
+              setState(() {
+                _isGeneratingPdf = false;
+              });
+            }
+          }
         },
-        icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-        label: const Text('Generate & Share PDF'),
+        icon: _isGeneratingPdf
+            ? SizedBox(
+                width: 20,
+                height: 20,
+                child: const CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              )
+            : const Icon(Icons.picture_as_pdf, color: Colors.white),
+        label: Text(_isGeneratingPdf ? 'Generating PDF...' : 'Generate & Share PDF'),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryBlue,
           foregroundColor: Colors.white,

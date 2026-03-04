@@ -9,17 +9,49 @@ use App\Models\Staff;
 use App\Models\StaffPeriodPayment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ReportController extends Controller
 {
     /**
      * Get labor report for a staff member
-     *
-     * @param Request $request
-     * @param int $staffId
-     * @return \Illuminate\Http\JsonResponse
      */
     public function getLaborReport(Request $request, $staffId)
+    {
+        $data = $this->buildLaborReportData($request, $staffId);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Labor report retrieved successfully',
+            'data' => $data,
+        ], 200);
+    }
+
+    /**
+     * Generate PDF for labor report and return as download.
+     */
+    public function downloadLaborReportPdf(Request $request, $staffId)
+    {
+        $data = $this->buildLaborReportData($request, $staffId);
+
+        $html = view('pdf.labor_report', ['data' => $data])->render();
+
+        $fileName = sprintf(
+            'labor_report_%s_%d_%02d.pdf',
+            preg_replace('/[^A-Za-z0-9]+/', '_', $data['staff_name'] ?? 'staff'),
+            $data['year'] ?? now()->year,
+            $data['month'] ?? now()->month,
+        );
+
+        $pdf = Pdf::loadHTML($html)->setPaper('a4', 'portrait');
+
+        return $pdf->download($fileName);
+    }
+
+    /**
+     * Build labor report data array reused by JSON and PDF endpoints.
+     */
+    private function buildLaborReportData(Request $request, int $staffId): array
     {
         $validated = $request->validate([
             'month' => 'nullable|integer|min:1|max:12',
@@ -143,46 +175,42 @@ class ReportController extends Controller
             ];
         })->values();
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Labor report retrieved successfully',
-            'data' => [
-                'staff_id' => $staff->id,
-                'staff_name' => $staff->name,
-                'phone_number' => $staff->phone_number,
-                'salary_type' => $staff->salary_type,
-                'salary_amount' => (float) $staff->salary_amount,
-                'overtime_charges' => (float) $staff->overtime_charges,
-                'month' => $month,
-                'year' => $year,
-                'attendance_summary' => [
-                    'present' => $presentCount,
-                    'absent' => $absentCount,
-                    'overtime' => $overtimeCount,
-                    'week_off' => $weekOffCount,
-                    'half_day' => $halfDayCount,
-                    'days_in_month' => $daysInMonth,
-                    'working_days' => $workingDaysInMonth,
-                ],
-                'payment_summary' => [
-                    'basic_earnings' => round($basicEarnings, 2),
-                    'overtime_earnings' => round($overtimeEarnings, 2),
-                    'total_earnings' => round($totalEarnings, 2),
-                    'advance_payments' => round($advancePayments, 2),
-                    'net_payment' => round($netPayment, 2),
-                    'amount_paid_this_period' => round($amountPaidThisPeriod, 2),
-                    'amount_paid_at' => $amountPaidAt,
-                    'remaining_due_this_period' => round($remainingDueThisPeriod, 2),
-                    'previous_due_total' => round($previousDueTotal, 2),
-                    'previous_due_breakdown' => $previousDueBreakdown,
-                    'total_amount_due' => round($totalAmountDue, 2),
-                    'remaining_total_due' => round($remainingTotalDue, 2),
-                    'total_worked_hours' => round($totalWorkedHours, 2),
-                    'total_overtime_hours' => round($totalOvertimeHours, 2),
-                ],
-                'attendance_details' => $attendanceDetails,
+        return [
+            'staff_id' => $staff->id,
+            'staff_name' => $staff->name,
+            'phone_number' => $staff->phone_number,
+            'salary_type' => $staff->salary_type,
+            'salary_amount' => (float) $staff->salary_amount,
+            'overtime_charges' => (float) $staff->overtime_charges,
+            'month' => $month,
+            'year' => $year,
+            'attendance_summary' => [
+                'present' => $presentCount,
+                'absent' => $absentCount,
+                'overtime' => $overtimeCount,
+                'week_off' => $weekOffCount,
+                'half_day' => $halfDayCount,
+                'days_in_month' => $daysInMonth,
+                'working_days' => $workingDaysInMonth,
             ],
-        ], 200);
+            'payment_summary' => [
+                'basic_earnings' => round($basicEarnings, 2),
+                'overtime_earnings' => round($overtimeEarnings, 2),
+                'total_earnings' => round($totalEarnings, 2),
+                'advance_payments' => round($advancePayments, 2),
+                'net_payment' => round($netPayment, 2),
+                'amount_paid_this_period' => round($amountPaidThisPeriod, 2),
+                'amount_paid_at' => $amountPaidAt,
+                'remaining_due_this_period' => round($remainingDueThisPeriod, 2),
+                'previous_due_total' => round($previousDueTotal, 2),
+                'previous_due_breakdown' => $previousDueBreakdown,
+                'total_amount_due' => round($totalAmountDue, 2),
+                'remaining_total_due' => round($remainingTotalDue, 2),
+                'total_worked_hours' => round($totalWorkedHours, 2),
+                'total_overtime_hours' => round($totalOvertimeHours, 2),
+            ],
+            'attendance_details' => $attendanceDetails,
+        ];
     }
 
     /**

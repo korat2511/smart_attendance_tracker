@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:connectivity_plus/connectivity_plus.dart';
 
@@ -483,6 +484,7 @@ class ApiService {
       outTime: attendanceData['out_time'] as String?,
       overtimeHours: (attendanceData['overtime_hours'] as num?)?.toDouble() ?? 0.0,
       advanceAmount: (attendanceData['advance_amount'] as num?)?.toDouble() ?? 0.0,
+      advanceNotes: attendanceData['advance_notes'] as String?,
     );
   }
 
@@ -582,6 +584,7 @@ class ApiService {
         outTime: json['out_time'] as String?,
         overtimeHours: (json['overtime_hours'] as num?)?.toDouble() ?? 0.0,
         advanceAmount: (json['advance_amount'] as num?)?.toDouble() ?? 0.0,
+        advanceNotes: json['advance_notes'] as String?,
       );
     }).toList();
 
@@ -707,6 +710,53 @@ class ApiService {
     return list
         .map((e) => CashbookTransactionModel.fromJson(e as Map<String, dynamic>))
         .toList();
+  }
+
+  /// Download labor report PDF for a staff member and month.
+  Future<Uint8List> downloadLaborReportPdf({
+    required int staffId,
+    required int month,
+    required int year,
+  }) async {
+    final uri = Uri.parse('${ApiConstants.basePath}/report/labor/$staffId/pdf').replace(
+      queryParameters: {'month': month.toString(), 'year': year.toString()},
+    );
+
+    final hasInternet = await _checkInternetConnection();
+    if (!hasInternet) {
+      throw ApiException(
+        message: 'No internet connection',
+        statusCode: 0,
+        type: ApiExceptionType.noInternet,
+      );
+    }
+
+    final token = await StorageService.getToken();
+    final headers = <String, String>{
+      'Accept': 'application/pdf',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+
+    final response = await http.get(uri, headers: headers);
+    if (response.statusCode == 200) {
+      return response.bodyBytes;
+    }
+
+    // Try to parse error body as JSON to reuse existing error patterns.
+    try {
+      _handleResponse<Map<String, dynamic>>(
+        response,
+        (json) => json,
+      );
+    } catch (e) {
+      if (e is ApiException) rethrow;
+    }
+
+    throw ApiException(
+      message: 'Failed to download report',
+      statusCode: response.statusCode,
+      type: ApiExceptionType.unknown,
+    );
   }
 
   Future<void> addCashbookIncome({

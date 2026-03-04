@@ -33,6 +33,7 @@ class CashbookTransactionModel {
   final String description;
   final double amount;
   final String paymentMethod; // upi, bank_transfer, cash, other
+  final String? notes;
 
   CashbookTransactionModel({
     required this.id,
@@ -41,6 +42,7 @@ class CashbookTransactionModel {
     required this.description,
     required this.amount,
     this.paymentMethod = 'other',
+    this.notes,
   });
 
   bool get isIncome => type == 'income';
@@ -58,6 +60,7 @@ class CashbookTransactionModel {
       description: json['description'] as String? ?? '',
       amount: _toDouble(json['amount']),
       paymentMethod: json['payment_method'] as String? ?? 'other',
+      notes: json['notes'] as String?,
     );
   }
 }
