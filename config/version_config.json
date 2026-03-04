@@ -1,5 +1,5 @@
 {
-  "latest_version": "1.0.7",
+  "latest_version": "1.0.8",
   "android_force_update": false,
   "ios_force_update": false,
   "message": "New version available with bug fixes and improvements",
@@ -8,7 +8,7 @@
     "Enhanced user experience",
     "Security updates"
   ],
-  "min_required_version": "1.0.7",
+  "min_required_version": "1.0.8",
   "update_url": {
     "android": "https://play.google.com/store/apps/details?id=com.originlab.attendex",
     "ios": "https://apps.apple.com/app/attendex/id0000000000"

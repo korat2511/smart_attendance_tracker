@@ -2,8 +2,8 @@ abstract class AppConstants {
   AppConstants._();
 
   static const String appName = 'AttendEx';
-  static const String appVersion = '1.0.7';
-  static const String buildNumber = '7';
+  static const String appVersion = '1.0.8';
+  static const String buildNumber = '8';
   static String get fullVersion => '$appVersion ($buildNumber)';
 
   static const int minPasswordLength = 8;
